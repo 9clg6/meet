@@ -14,7 +14,7 @@ import secrets
 import string
 from datetime import timedelta
 from functools import lru_cache
-from typing import List, Optional
+from typing import Dict, List, Optional
 from uuid import uuid4
 
 from django.conf import settings
@@ -78,6 +78,7 @@ def generate_token(  # noqa: PLR0917
     role: Optional[str] = None,
     participant_id: Optional[str] = None,
     ttl: Optional[timedelta] = None,
+    extra_attributes: Optional[Dict[str, str]] = None,
 ) -> str:
     """Generate a LiveKit access token for a user in a specific room.
 
@@ -91,9 +92,13 @@ def generate_token(  # noqa: PLR0917
         sources: (Optional[List[str]]): List of media sources the user can publish
                          If none, defaults to LIVEKIT_DEFAULT_SOURCES.
         role (Optional[str]): Room's access role if any
-        participant_id (Optional[str]): Stable identifier for anonymous users;
-                         used as identity when user.is_anonymous.
+        participant_id (Optional[str]): The identity of the participant when the
+                         caller imposes it (an anonymous user, or a client such as
+                         MatrixRTC whose identity is `user:device`); otherwise the
+                         `sub` of the user.
         ttl (Optional[timedelta]): Token validity duration. Defaults to LiveKit SDK default.
+        extra_attributes (Optional[Dict[str, str]]): Attributes added to the token
+                         (e.g. the Matrix ids of the participant).
 
     The token of an authenticated user carries the user in its `user_id`
     attribute, with its `user_id_proof`: the identity alone names nobody, an
@@ -124,7 +129,7 @@ def generate_token(  # noqa: PLR0917
         identity = participant_id or str(uuid4())
         default_username = "Anonymous"
     else:
-        identity = str(user.sub)
+        identity = participant_id or str(user.sub)
         default_username = user.full_name or str(user)
 
     if color is None:
@@ -139,6 +144,7 @@ def generate_token(  # noqa: PLR0917
         "color": color,
         "room_role": role,
         "is_authenticated": "true" if user.is_authenticated else "false",
+        **(extra_attributes or {}),
     }
     if user.is_authenticated:
         # The user behind the identity, for LiveKitTokenAuthentication
