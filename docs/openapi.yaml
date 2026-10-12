@@ -319,7 +319,10 @@ paths:
       description: |
         Returns a LiveKit token for the delegated user in the room, with the
         identity the application imposes. The user needs no role on the room:
-        the application vouches for them. Application tokens only.
+        the application vouches for them. Application tokens only, and only
+        for the rooms this application created: any other room answers 404.
+        The token lives `APPLICATION_LIVEKIT_TOKEN_TTL_SECONDS` (one hour by
+        default).
       operationId: mintLivekitToken
       security:
         - BearerAuth: [rooms:livekit_token]

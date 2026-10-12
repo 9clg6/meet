@@ -1,5 +1,6 @@
 """External API endpoints"""
 
+from datetime import timedelta
 from logging import getLogger
 
 from django.conf import settings
@@ -214,7 +215,13 @@ class RoomViewSet(
         data = serializer.validated_data
         room = self.get_object()
         user = request.user
-        client_id = (request.auth or {}).get("client_id", "unknown")
+        client_id = (request.auth or {}).get("client_id")
+
+        # Only the rooms this application created: its secret, once leaked,
+        # must not open the rooms people made in Meet
+        application = room.created_by_application
+        if application is None or application.client_id != client_id:
+            raise drf_exceptions.NotFound()
 
         sub = data.get("sub")
         if sub and not user.sub:
@@ -251,6 +258,7 @@ class RoomViewSet(
                 "matrix_user_id": matrix_user_id,
                 "matrix_device_id": matrix_device_id,
             },
+            ttl=timedelta(seconds=settings.APPLICATION_LIVEKIT_TOKEN_TTL_SECONDS),
         )
 
         # Log for auditing
@@ -267,8 +275,17 @@ class RoomViewSet(
         return drf_response.Response(livekit_config)
 
     def perform_create(self, serializer):
-        """Set the current user as owner of the newly created room."""
-        room = serializer.save()
+        """Set the current user as owner of the newly created room, and keep
+        the application that created it."""
+        application = None
+        if isinstance(
+            self.request.successful_authenticator,
+            authentication.ApplicationJWTAuthentication,
+        ):
+            application = models.Application.objects.filter(
+                client_id=self.request.auth.get("client_id")
+            ).first()
+        room = serializer.save(created_by_application=application)
         models.ResourceAccess.objects.create(
             resource=room,
             user=self.request.user,
