@@ -59,7 +59,7 @@ class LiveKitTokenAuthentication(authentication.BaseAuthentication):
         pk = attributes.get("user_id")
         if pk:
             try:
-                return UserModel.objects.get(pk=pk)
+                return UserModel.objects.get(pk=pk, is_active=True)
             except (UserModel.DoesNotExist, ValueError, DjangoValidationError):
                 pass
         try:

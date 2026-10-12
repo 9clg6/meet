@@ -65,3 +65,14 @@ def test_anonymous_when_nothing_matches():
     )
 
     assert user.is_anonymous
+
+
+def test_no_user_for_a_disabled_account():
+    """A token minted before the account was disabled names nobody."""
+    alice = UserFactory(is_active=False)
+
+    user, _ = authenticate(
+        livekit_token("@alice:localhost:DEVICE", {"user_id": str(alice.pk)})
+    )
+
+    assert user.is_anonymous
