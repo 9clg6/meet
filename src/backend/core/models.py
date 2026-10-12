@@ -438,6 +438,16 @@ class Room(Resource):
         verbose_name=_("Room PIN code"),
         help_text=_("Unique n-digit code that identifies this room in telephony mode."),
     )
+    created_by_application = models.ForeignKey(
+        "Application",
+        on_delete=models.SET_NULL,
+        related_name="rooms",
+        blank=True,
+        null=True,
+        editable=False,
+        verbose_name=_("Application that created the room"),
+        help_text=_("Set when the room was created through the external API."),
+    )
 
     class Meta:
         db_table = "meet_room"

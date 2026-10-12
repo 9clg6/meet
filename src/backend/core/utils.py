@@ -212,6 +212,7 @@ def generate_livekit_config(  # noqa: PLR0917
     participant_id: Optional[str] = None,
     identity: Optional[str] = None,
     extra_attributes: Optional[Dict[str, str]] = None,
+    ttl: Optional[timedelta] = None,
 ) -> dict:
     """Generate LiveKit configuration for room access.
 
@@ -226,6 +227,7 @@ def generate_livekit_config(  # noqa: PLR0917
                          used as identity when user.is_anonymous.
         identity (Optional[str]): Identity imposed by a trusted caller.
         extra_attributes (Optional[Dict[str, str]]): Attributes added to the token.
+        ttl (Optional[timedelta]): Validity of a token with an imposed identity.
 
     Returns:
         dict: LiveKit configuration with URL, room and access token
@@ -237,7 +239,11 @@ def generate_livekit_config(  # noqa: PLR0917
 
     imposed = {}
     if identity is not None:
-        imposed = {"identity": identity, "extra_attributes": extra_attributes}
+        imposed = {
+            "identity": identity,
+            "extra_attributes": extra_attributes,
+            "ttl": ttl,
+        }
 
     return {
         "url": settings.LIVEKIT_CONFIGURATION["url"],

@@ -14,12 +14,45 @@ import pytest
 from lasuite.oidc_resource_server.authentication import ResourceServerAuthentication
 from rest_framework.test import APIClient
 
-from core.factories import RoomFactory, UserFactory
+from core.factories import ApplicationFactory, RoomFactory, UserFactory
 from core.models import ApplicationScope, RoleChoices
 
-from .test_external_api_rooms import generate_test_token
-
 pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture(autouse=True)
+def application():
+    """The application that asks: the rooms of these tests are its own."""
+    return ApplicationFactory(client_id="tom")
+
+
+def room_of_the_application(**kwargs):
+    """A room the application created through the external API."""
+    return RoomFactory(
+        created_by_application=ApplicationFactory._meta.model.objects.get(
+            client_id="tom"
+        ),
+        **kwargs,
+    )
+
+
+def application_token(user, scopes, client_id="tom"):
+    """The token Meet gives an application for one of its users."""
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {
+            "iss": settings.APPLICATION_JWT_ISSUER,
+            "aud": settings.APPLICATION_JWT_AUDIENCE,
+            "iat": now,
+            "exp": now + timedelta(seconds=60),
+            "client_id": client_id,
+            "scope": " ".join(scopes),
+            "user_id": str(user.id),
+            "delegated": True,
+        },
+        settings.APPLICATION_JWT_SECRET_KEY,
+        algorithm=settings.APPLICATION_JWT_ALG,
+    )
 
 
 def decode(token):
@@ -36,7 +69,7 @@ def mint(user, room, body, scopes=(ApplicationScope.ROOMS_LIVEKIT_TOKEN,)):
     """Ask a token for `user` in `room` as an application."""
     client = APIClient()
     client.credentials(
-        HTTP_AUTHORIZATION=f"Bearer {generate_test_token(user, list(scopes))}"
+        HTTP_AUTHORIZATION=f"Bearer {application_token(user, list(scopes))}"
     )
     return client.post(
         f"/external-api/v1.0/rooms/{room.id}/livekit-token/", body, format="json"
@@ -51,7 +84,7 @@ def test_livekit_token_uses_the_identity_the_application_imposes(settings):
         "url": "http://synapse:7880",
     }
     owner = UserFactory()
-    room = RoomFactory(users=[(owner, RoleChoices.OWNER)])
+    room = room_of_the_application(users=[(owner, RoleChoices.OWNER)])
     alice = UserFactory(sub="alice-sub")
 
     response = mint(
@@ -80,7 +113,7 @@ def test_livekit_token_uses_the_identity_the_application_imposes(settings):
 
 def test_livekit_token_needs_no_role_on_the_room():
     """The application vouches for the user: no ResourceAccess needed."""
-    room = RoomFactory()
+    room = room_of_the_application()
     alice = UserFactory()
 
     response = mint(alice, room, {"identity": "@alice:localhost:DEVICE"})
@@ -91,7 +124,7 @@ def test_livekit_token_needs_no_role_on_the_room():
 
 def test_livekit_token_one_user_two_devices_two_identities():
     """The same user from two devices gets two identities: LiveKit keeps both."""
-    room = RoomFactory()
+    room = room_of_the_application()
     alice = UserFactory()
 
     first = mint(alice, room, {"identity": "@alice:localhost:A"})
@@ -105,7 +138,7 @@ def test_livekit_token_sets_the_sub_of_a_provisioned_user(caplog):
     """A user provisioned by email has no sub: the application gives it, once,
     and the log keeps it."""
     caplog.set_level("INFO")
-    room = RoomFactory()
+    room = room_of_the_application()
     alice = UserFactory(sub=None)
 
     mint(alice, room, {"identity": "@alice:localhost:A", "sub": "alice-oidc"})
@@ -121,7 +154,7 @@ def test_livekit_token_sets_the_sub_of_a_provisioned_user(caplog):
 def test_livekit_token_does_not_tell_that_a_sub_exists():
     """A sub another user has is not set, and the answer does not say so."""
     UserFactory(sub="taken")
-    room = RoomFactory()
+    room = room_of_the_application()
     alice = UserFactory(sub=None)
 
     response = mint(alice, room, {"identity": "@alice:localhost:A", "sub": "taken"})
@@ -134,7 +167,7 @@ def test_livekit_token_does_not_tell_that_a_sub_exists():
 
 def test_livekit_token_requires_its_own_scope():
     """rooms:retrieve reads a room: it mints no token."""
-    room = RoomFactory()
+    room = room_of_the_application()
     alice = UserFactory()
 
     response = mint(
@@ -151,7 +184,7 @@ def test_livekit_token_refuses_the_oidc_token_of_a_user():
     """Applications only: a resource server token, which an end user holds,
     does not reach the route, whatever its scopes."""
     owner = UserFactory()
-    room = RoomFactory(users=[(owner, RoleChoices.OWNER)])
+    room = room_of_the_application(users=[(owner, RoleChoices.OWNER)])
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION="Bearer an-oidc-access-token")
 
@@ -173,7 +206,7 @@ def test_livekit_token_refuses_the_oidc_token_of_a_user():
 def test_livekit_token_refuses_an_addons_token():
     """Applications only: a token signed for the addons does not reach the route."""
     alice = UserFactory()
-    room = RoomFactory()
+    room = room_of_the_application()
     now = datetime.now(timezone.utc)
     token = jwt.encode(
         {
@@ -205,7 +238,7 @@ def test_livekit_token_refuses_an_addons_token():
 )
 def test_livekit_token_refuses_an_identity_of_another_shape(identity):
     """The identity is `@user:server:device`, nothing else."""
-    room = RoomFactory()
+    room = room_of_the_application()
     alice = UserFactory()
 
     response = mint(alice, room, {"identity": identity})
@@ -215,7 +248,9 @@ def test_livekit_token_refuses_an_identity_of_another_shape(identity):
 
 def test_livekit_token_follows_the_sources_of_the_room():
     """A member publishes what the room allows; an administrator, everything."""
-    room = RoomFactory(configuration={"can_publish_sources": ["microphone"]})
+    room = room_of_the_application(
+        configuration={"can_publish_sources": ["microphone"]}
+    )
     alice = UserFactory()
 
     member = mint(alice, room, {"identity": "@alice:localhost:A"})
@@ -235,7 +270,7 @@ def test_livekit_token_follows_the_sources_of_the_room():
 def test_livekit_token_is_logged(caplog):
     """The log keeps who got a token, for which room, never the token."""
     caplog.set_level("INFO")
-    room = RoomFactory()
+    room = room_of_the_application()
     alice = UserFactory()
 
     response = mint(alice, room, {"identity": "@alice:localhost:A", "role": "member"})
@@ -249,7 +284,7 @@ def test_livekit_token_is_logged(caplog):
 
 def test_livekit_token_requires_an_identity():
     """Without identity, 400."""
-    room = RoomFactory()
+    room = room_of_the_application()
     alice = UserFactory()
 
     assert mint(alice, room, {}).status_code == 400
@@ -258,7 +293,7 @@ def test_livekit_token_requires_an_identity():
 def test_livekit_token_unknown_room():
     """A room that does not exist: 404."""
     alice = UserFactory()
-    token = generate_test_token(alice, [ApplicationScope.ROOMS_LIVEKIT_TOKEN])
+    token = application_token(alice, [ApplicationScope.ROOMS_LIVEKIT_TOKEN])
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
@@ -269,3 +304,42 @@ def test_livekit_token_unknown_room():
     )
 
     assert response.status_code == 404
+
+
+def test_livekit_token_only_for_the_rooms_of_the_application():
+    """A room made in Meet, or by another application, does not exist for
+    this one: its secret opens its own rooms only."""
+    alice = UserFactory()
+    made_in_meet = RoomFactory()
+    of_another = RoomFactory(created_by_application=ApplicationFactory())
+
+    for room in (made_in_meet, of_another):
+        response = mint(alice, room, {"identity": "@alice:localhost:A"})
+        assert response.status_code == 404
+
+
+def test_room_created_by_an_application_keeps_it(application):
+    """The external API remembers which application created a room."""
+    owner = UserFactory()
+    client = APIClient()
+    token = application_token(owner, [ApplicationScope.ROOMS_CREATE])
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    response = client.post("/external-api/v1.0/rooms/", {}, format="json")
+
+    assert response.status_code == 201
+    room = application.rooms.get()
+    assert str(room.id) == response.json()["id"]
+
+
+def test_livekit_token_lives_as_long_as_the_setting_says(settings):
+    """The token expires after APPLICATION_LIVEKIT_TOKEN_TTL_SECONDS."""
+    settings.APPLICATION_LIVEKIT_TOKEN_TTL_SECONDS = 600
+    room = room_of_the_application()
+    alice = UserFactory()
+
+    claims = decode(
+        mint(alice, room, {"identity": "@alice:localhost:A"}).json()["token"]
+    )
+
+    assert 590 <= claims["exp"] - datetime.now(timezone.utc).timestamp() <= 600
