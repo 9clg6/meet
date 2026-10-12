@@ -43,11 +43,11 @@ def mock_worker_manager(mock_worker_service):
 
 
 def livekit_token_for(user, room):
-    """The LiveKit token Meet mints for a Twake Chat participant (D30)."""
+    """The LiveKit token Meet mints for the user of an application."""
     return utils.generate_token(
         room=str(room.id),
         user=user,
-        participant_id=f"@{user.sub}:localhost:DEVICE",
+        identity=f"@{user.sub}:localhost:DEVICE",
     )
 
 
@@ -81,6 +81,31 @@ def test_start_recording_with_a_livekit_token_of_another_room(settings):
     room = RoomFactory(configuration={"screen_recording_permission": "authenticated"})
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {livekit_token_for(user, other)}")
+
+    response = client.post(
+        f"/api/v1.0/rooms/{room.id}/start-recording/",
+        {"mode": "screen_recording"},
+        format="json",
+    )
+
+    assert response.status_code == 403
+    assert Recording.objects.count() == 0
+
+
+def test_start_recording_does_not_trust_the_role_of_the_token(settings):
+    """The token says « owner »; the room lets its owners and administrators
+    record, and the user is none of them: refused."""
+    settings.RECORDING_ENABLE = True
+    user = UserFactory()
+    room = RoomFactory(configuration={"screen_recording_permission": "admin_owner"})
+    token = utils.generate_token(
+        room=str(room.id),
+        user=user,
+        role="owner",
+        identity=f"@{user.sub}:localhost:DEVICE",
+    )
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
     response = client.post(
         f"/api/v1.0/rooms/{room.id}/start-recording/",
