@@ -807,6 +807,7 @@ class ApplicationScope(models.TextChoices):
     ROOMS_RETRIEVE = "rooms:retrieve", _("Retrieve room details")
     ROOMS_UPDATE = "rooms:update", _("Update rooms")
     ROOMS_DELETE = "rooms:delete", _("Delete rooms")
+    ROOMS_LIVEKIT_TOKEN = "rooms:livekit_token", _("Mint LiveKit tokens")
 
 
 class Application(BaseModel):

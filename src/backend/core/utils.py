@@ -69,6 +69,7 @@ def generate_token(  # noqa: PLR0917
     role: Optional[str] = None,
     participant_id: Optional[str] = None,
     ttl: Optional[timedelta] = None,
+    identity: Optional[str] = None,
     extra_attributes: Optional[Dict[str, str]] = None,
 ) -> str:
     """Generate a LiveKit access token for a user in a specific room.
@@ -83,11 +84,13 @@ def generate_token(  # noqa: PLR0917
         sources: (Optional[List[str]]): List of media sources the user can publish
                          If none, defaults to LIVEKIT_DEFAULT_SOURCES.
         role (Optional[str]): Room's access role if any
-        participant_id (Optional[str]): The identity of the participant when the
-                         caller imposes it (an anonymous user, or a client such as
-                         MatrixRTC whose identity is `user:device`); otherwise the
-                         `sub` of the user.
+        participant_id (Optional[str]): Stable identifier for anonymous users;
+                         used as identity when user.is_anonymous.
         ttl (Optional[timedelta]): Token validity duration. Defaults to LiveKit SDK default.
+        identity (Optional[str]): Identity imposed by a trusted caller, whoever the
+                         user is (a client whose identity is not the `sub` of
+                         the user). The token then carries the user in its
+                         `user_id` attribute.
         extra_attributes (Optional[Dict[str, str]]): Attributes added to the token
                          (e.g. the Matrix ids of the participant).
 
@@ -112,11 +115,12 @@ def generate_token(  # noqa: PLR0917
         can_subscribe=True,
     )
 
+    imposed_identity = identity
     if user.is_anonymous:
-        identity = participant_id or str(uuid4())
+        identity = imposed_identity or participant_id or str(uuid4())
         default_username = "Anonymous"
     else:
-        identity = participant_id or str(user.sub)
+        identity = imposed_identity or str(user.sub)
         default_username = user.full_name or str(user)
 
     if color is None:
@@ -133,7 +137,7 @@ def generate_token(  # noqa: PLR0917
         "is_authenticated": "true" if user.is_authenticated else "false",
         **(extra_attributes or {}),
     }
-    if user.is_authenticated:
+    if imposed_identity and user.is_authenticated:
         # The user behind an imposed identity, for LiveKitTokenAuthentication
         attributes["user_id"] = str(user.pk)
 
@@ -206,6 +210,8 @@ def generate_livekit_config(  # noqa: PLR0917
     color: Optional[str] = None,
     configuration: Optional[dict] = None,
     participant_id: Optional[str] = None,
+    identity: Optional[str] = None,
+    extra_attributes: Optional[Dict[str, str]] = None,
 ) -> dict:
     """Generate LiveKit configuration for room access.
 
@@ -218,6 +224,8 @@ def generate_livekit_config(  # noqa: PLR0917
         configuration (Optional[dict]): Room configuration dict that can override default settings.
         participant_id (Optional[str]): Stable identifier for anonymous users;
                          used as identity when user.is_anonymous.
+        identity (Optional[str]): Identity imposed by a trusted caller.
+        extra_attributes (Optional[Dict[str, str]]): Attributes added to the token.
 
     Returns:
         dict: LiveKit configuration with URL, room and access token
@@ -226,6 +234,10 @@ def generate_livekit_config(  # noqa: PLR0917
     sources = None
     if configuration is not None:
         sources = configuration.get("can_publish_sources", None)
+
+    imposed = {}
+    if identity is not None:
+        imposed = {"identity": identity, "extra_attributes": extra_attributes}
 
     return {
         "url": settings.LIVEKIT_CONFIGURATION["url"],
@@ -238,6 +250,7 @@ def generate_livekit_config(  # noqa: PLR0917
             sources=sources,
             role=role,
             participant_id=participant_id,
+            **imposed,
         ),
     }
 

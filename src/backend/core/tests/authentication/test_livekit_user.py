@@ -1,5 +1,5 @@
 """
-Tests of the user LiveKitTokenAuthentication resolves (Twake Chat, D30).
+Tests of the user LiveKitTokenAuthentication resolves.
 """
 
 from django.conf import settings

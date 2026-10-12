@@ -154,9 +154,9 @@ class RoomViewSet(
     - list: List rooms the user has access to (requires 'rooms:list' scope)
     - retrieve: Get room details (requires 'rooms:retrieve' scope)
     - create: Create a new room owned by the user (requires 'rooms:create' scope)
-    - livekit-token: Mint a LiveKit token for the user in a room (requires
-      'rooms:retrieve' scope; no role on the room needed, the application vouches
-      for the user, as the MatrixRTC token service of Twake does)
+    - livekit-token: Mint a LiveKit token for the user in a room (applications
+      only, requires 'rooms:livekit_token' scope; no role on the room needed,
+      the application vouches for the user)
     """
 
     authentication_classes = [
@@ -197,46 +197,74 @@ class RoomViewSet(
         methods=["post"],
         url_path="livekit-token",
         url_name="livekit-token",
+        # Applications only: the token is minted for any room, with the role
+        # the caller gives, so no token an end user can hold may reach it
+        authentication_classes=[authentication.ApplicationJWTAuthentication],
         permission_classes=[
             api.permissions.IsAuthenticated & permissions.HasRequiredRoomScope
         ],
     )
     def livekit_token(self, request, pk=None):  # pylint: disable=unused-argument
         """Mint a LiveKit token for the delegated user, with the identity the
-        application imposes (Twake Chat, D30: `user:device` as MatrixRTC derives
-        it). Meet then knows the participant: recording, transcription and the
-        raised hands follow its rules."""
+        application imposes (`@user:server:device`, as a MatrixRTC client
+        derives it). Meet then knows the participant: recording, transcription
+        and the raised hands follow its rules."""
         serializer = serializers.LivekitTokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         room = self.get_object()
         user = request.user
+        client_id = (request.auth or {}).get("client_id", "unknown")
 
         sub = data.get("sub")
         if sub and not user.sub:
             user.sub = sub
-            user.save(update_fields=["sub"])
+            try:
+                user.save(update_fields=["sub"])
+            except ValidationError:
+                # Say nothing of it to the caller: the answer would tell
+                # whether a sub exists
+                user.sub = None
+                logger.warning(
+                    "Sub refused via application: user_id=%s, client_id=%s",
+                    user.id,
+                    client_id,
+                )
+            else:
+                logger.info(
+                    "Sub set via application: user_id=%s, client_id=%s",
+                    user.id,
+                    client_id,
+                )
 
         identity = data["identity"]
         matrix_user_id, _, matrix_device_id = identity.rpartition(":")
-        token = utils.generate_token(
-            room=str(room.id),
+        role = data.get("role")
+        livekit_config = utils.generate_livekit_config(
+            room_id=str(room.id),
             user=user,
             username=data.get("username"),
-            role=data.get("role"),
-            participant_id=identity,
+            role=role,
+            configuration=room.configuration,
+            identity=identity,
             extra_attributes={
                 "matrix_user_id": matrix_user_id,
                 "matrix_device_id": matrix_device_id,
             },
         )
-        return drf_response.Response(
-            {
-                "url": settings.LIVEKIT_CONFIGURATION["url"],
-                "room": str(room.id),
-                "token": token,
-            }
+
+        # Log for auditing
+        logger.info(
+            "LiveKit token minted via application: "
+            "room_id=%s, user_id=%s, identity=%s, role=%s, client_id=%s",
+            room.id,
+            user.id,
+            identity,
+            role,
+            client_id,
         )
+
+        return drf_response.Response(livekit_config)
 
     def perform_create(self, serializer):
         """Set the current user as owner of the newly created room."""
