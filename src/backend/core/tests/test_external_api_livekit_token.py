@@ -16,6 +16,7 @@ from rest_framework.test import APIClient
 
 from core.factories import ApplicationFactory, RoomFactory, UserFactory
 from core.models import ApplicationScope, RoleChoices
+from core.utils import user_id_proof
 
 pytestmark = pytest.mark.django_db
 
@@ -106,6 +107,9 @@ def test_livekit_token_uses_the_identity_the_application_imposes(settings):
     assert claims["video"]["room"] == str(room.id)
     assert claims["video"]["roomAdmin"] is True
     assert claims["attributes"]["user_id"] == str(alice.pk)
+    assert claims["attributes"]["user_id_proof"] == user_id_proof(
+        str(room.id), "@alice:localhost:DEVICE", str(alice.pk)
+    )
     assert claims["attributes"]["matrix_user_id"] == "@alice:localhost"
     assert claims["attributes"]["matrix_device_id"] == "DEVICE"
     assert claims["attributes"]["room_role"] == "administrator"
