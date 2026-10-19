@@ -29,6 +29,7 @@ and this project adheres to
 
 ### Fixed
 
+- 🐛(mail) without a summary the recap email announces the transcript alone, and the document is named after it
 - 🐛(backend) the late joiners' catch-up summary also needs the summary capability
 - 🐛(backend) a deferred transcription is summarized only for an owner holding the summary capability
 - 🐛(backend) a live run's end-of-meeting summary needs the summary capability
