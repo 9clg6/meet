@@ -61,6 +61,19 @@ def test_user_of_a_token_meet_minted_for_them():
     assert user == alice
 
 
+def test_user_behind_an_imposed_identity():
+    """An imposed identity (`user:device`) names nobody: the `user_id`
+    attribute does, even for a user without a sub."""
+    alice = UserFactory(sub=None)
+
+    user, claims = authenticate(
+        generate_token(room="room", user=alice, identity="@alice:localhost:DEVICE")
+    )
+
+    assert claims.identity == "@alice:localhost:DEVICE"
+    assert user == alice
+
+
 def test_no_user_for_an_anonymous_participant_with_the_sub_of_a_user():
     """The identity of an anonymous participant comes from the client: being
     equal to the sub of a user does not make the token theirs."""
@@ -134,16 +147,5 @@ def test_no_user_for_a_disabled_account():
     alice.save()
 
     user, _ = authenticate(token)
-
-    assert user.is_anonymous
-
-
-def test_no_user_for_a_disabled_account():
-    """A token minted before the account was disabled names nobody."""
-    alice = UserFactory(is_active=False)
-
-    user, _ = authenticate(
-        livekit_token("@alice:localhost:DEVICE", {"user_id": str(alice.pk)})
-    )
 
     assert user.is_anonymous
