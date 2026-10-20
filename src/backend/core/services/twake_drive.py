@@ -8,6 +8,8 @@ import json
 import logging
 from urllib.parse import quote
 
+from django.conf import settings
+
 import aiohttp
 
 logger = logging.getLogger(__name__)
@@ -118,6 +120,22 @@ def build_recording_filename(recording, extension, language=None):
 def build_linto_shortcut_filename(language=None):
     """Name of the shortcut to the LinTO Studio conversation."""
     return f"{get_labels(language)['linto_shortcut']}.url"
+
+
+def resolve_instance(user):
+    """The Twake instance where the files of `user` go, or None when unknown.
+
+    The instance is never derived from an email: `bob@x` is not always `bob.x`,
+    and a wrong guess would put the files in someone else's Drive.
+    """
+    if settings.TWAKE_DEV_INSTANCE_OVERRIDE:
+        return settings.TWAKE_DEV_INSTANCE_OVERRIDE
+    if user.twake_instance:
+        return user.twake_instance
+    if user.sub and not any(c in user.sub for c in "@."):
+        return f"{user.sub}.{settings.TWAKE_INSTANCE_DOMAIN}"
+    logger.warning("No Twake instance known for user %s", user.id)
+    return None
 
 
 async def get_drive_token(cloudery_url, cloudery_token, instance):

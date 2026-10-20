@@ -114,6 +114,64 @@ def test_authentication_getter_new_user_with_names(monkeypatch, email):
     assert models.User.objects.count() == 1
 
 
+def test_authentication_getter_keeps_the_twake_instance_claim(monkeypatch, settings):
+    """The claim named by OIDC_USERINFO_TWAKE_INSTANCE_FIELD fills the Twake
+    instance of a new user and updates it at each sign-in."""
+    settings.OIDC_USERINFO_TWAKE_INSTANCE_FIELD = "workplaceFqdn"
+    klass = OIDCAuthenticationBackend()
+    user_info = {"sub": "123", "workplaceFqdn": "bob.twake.test"}
+    monkeypatch.setattr(
+        OIDCAuthenticationBackend, "get_userinfo", lambda *args: user_info
+    )
+
+    user = klass.get_or_create_user(
+        access_token="test-token", id_token=None, payload=None
+    )
+    assert user.twake_instance == "bob.twake.test"
+
+    user_info["workplaceFqdn"] = "bob-2.twake.test"
+    klass.get_or_create_user(access_token="test-token", id_token=None, payload=None)
+    user.refresh_from_db()
+    assert user.twake_instance == "bob-2.twake.test"
+
+
+def test_authentication_getter_signs_in_despite_a_twake_instance_claim_that_is_no_hostname(
+    monkeypatch, settings
+):
+    """A claim that is not a bare hostname is dropped instead of failing the sign-in."""
+    settings.OIDC_USERINFO_TWAKE_INSTANCE_FIELD = "workplaceFqdn"
+    klass = OIDCAuthenticationBackend()
+    monkeypatch.setattr(
+        OIDCAuthenticationBackend,
+        "get_userinfo",
+        lambda *args: {"sub": "123", "workplaceFqdn": "a" * 300},
+    )
+
+    user = klass.get_or_create_user(
+        access_token="test-token", id_token=None, payload=None
+    )
+
+    assert user.twake_instance is None
+
+
+def test_authentication_getter_ignores_the_twake_instance_claim_by_default(
+    monkeypatch,
+):
+    """Without OIDC_USERINFO_TWAKE_INSTANCE_FIELD, no claim fills it."""
+    klass = OIDCAuthenticationBackend()
+    monkeypatch.setattr(
+        OIDCAuthenticationBackend,
+        "get_userinfo",
+        lambda *args: {"sub": "123", "workplaceFqdn": "bob.twake.test"},
+    )
+
+    user = klass.get_or_create_user(
+        access_token="test-token", id_token=None, payload=None
+    )
+
+    assert user.twake_instance is None
+
+
 def test_models_oidc_user_getter_invalid_token(django_assert_num_queries, monkeypatch):
     """The user's info doesn't contain a sub."""
     klass = OIDCAuthenticationBackend()

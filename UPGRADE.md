@@ -16,6 +16,11 @@ the following command inside your docker container:
 
 ## [Unreleased]
 
+Twake Drive deliveries no longer build the instance as `{sub}.{TWAKE_INSTANCE_DOMAIN}`
+when the `sub` holds an `@` or a dot. Such users need their instance from the
+claim named by `OIDC_USERINFO_TWAKE_INSTANCE_FIELD` (stored at each sign-in);
+without it, the upload is skipped with a warning.
+
 ## v1.23.0
 
 As part of the 1.23.0 release, the legacy `api/v1` implementation has been removed from the _experimental_ Summary service and Meet has been migrated to the new `api/v2`.

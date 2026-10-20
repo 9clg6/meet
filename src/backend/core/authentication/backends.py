@@ -4,7 +4,11 @@ import contextlib
 import logging
 
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured, SuspiciousOperation
+from django.core.exceptions import (
+    ImproperlyConfigured,
+    SuspiciousOperation,
+    ValidationError,
+)
 from django.utils.translation import gettext_lazy as _
 
 from lasuite.oidc_login.backends import (
@@ -41,11 +45,22 @@ class OIDCAuthenticationBackend(LaSuiteOIDCAuthenticationBackend):
           dict: A dictionary of extra claims.
 
         """
-        return {
+        claims = {
             # Get user's full name from OIDC fields defined in settings
             "full_name": self.compute_full_name(user_info),
             "short_name": user_info.get(settings.OIDC_USERINFO_SHORTNAME_FIELD),
         }
+        if settings.OIDC_USERINFO_TWAKE_INSTANCE_FIELD:
+            instance = user_info.get(settings.OIDC_USERINFO_TWAKE_INSTANCE_FIELD)
+            field = User._meta.get_field("twake_instance")  # noqa: SLF001  # pylint: disable=protected-access
+            try:
+                field.run_validators(instance)
+            except ValidationError:
+                # Saving it would fail the sign-in: only the deliveries go without it
+                logger.warning("Twake instance claim refused: %r", instance)
+            else:
+                claims["twake_instance"] = instance
+        return claims
 
     def post_get_or_create_user(self, user, claims, is_new_user):
         """
