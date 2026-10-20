@@ -92,11 +92,17 @@ class LobbyService:
 
         The cookie comes from the client and the identifier becomes the LiveKit
         identity of an anonymous participant: only a UUID is kept, in its
-        canonical form, anything else gets a new one."""
+        canonical form, and never the sub of a user, which is that user's
+        identity; anything else gets a new one."""
         try:
-            return str(uuid.UUID(request.COOKIES.get(settings.LOBBY_COOKIE_NAME)))
+            participant_id = str(
+                uuid.UUID(request.COOKIES.get(settings.LOBBY_COOKIE_NAME))
+            )
         except (TypeError, ValueError):
             return str(uuid.uuid4())
+        if models.User.objects.filter(sub=participant_id).exists():
+            return str(uuid.uuid4())
+        return participant_id
 
     @staticmethod
     def prepare_response(response, participant_id):
