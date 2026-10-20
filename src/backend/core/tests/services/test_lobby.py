@@ -138,11 +138,38 @@ def test_get_cache_key(lobby_service, participant_id):
 def test_get_or_create_participant_id_from_cookie(lobby_service):
     """Test extracting participant ID from cookie."""
     request = mock.Mock()
-    request.COOKIES = {settings.LOBBY_COOKIE_NAME: "existing-id"}
+    request.COOKIES = {
+        settings.LOBBY_COOKIE_NAME: "2f7f162f-e7d1-421b-90e7-02bfbfbf8def"
+    }
 
     participant_id = lobby_service._get_or_create_participant_id(request)
 
-    assert participant_id == "existing-id"
+    assert participant_id == "2f7f162f-e7d1-421b-90e7-02bfbfbf8def"
+
+
+def test_get_or_create_participant_id_canonical_form(lobby_service):
+    """A UUID cookie is kept in its canonical form."""
+    request = mock.Mock()
+    request.COOKIES = {
+        settings.LOBBY_COOKIE_NAME: "{2F7F162F-E7D1-421B-90E7-02BFBFBF8DEF}"
+    }
+
+    participant_id = lobby_service._get_or_create_participant_id(request)
+
+    assert participant_id == "2f7f162f-e7d1-421b-90e7-02bfbfbf8def"
+
+
+@pytest.mark.parametrize("cookie", ["existing-id", "", "alice@example.com", "*"])
+@mock.patch.object(uuid, "uuid4", return_value="generated-id")
+def test_get_or_create_participant_id_not_a_uuid(mock_uuid4, cookie, lobby_service):
+    """A cookie that is not a UUID is not used: a new identifier is created."""
+    request = mock.Mock()
+    request.COOKIES = {settings.LOBBY_COOKIE_NAME: cookie}
+
+    participant_id = lobby_service._get_or_create_participant_id(request)
+
+    assert participant_id == "generated-id"
+    mock_uuid4.assert_called_once()
 
 
 @mock.patch.object(uuid, "uuid4", return_value="generated-id")

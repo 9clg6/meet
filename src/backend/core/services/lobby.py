@@ -88,8 +88,15 @@ class LobbyService:
 
     @staticmethod
     def _get_or_create_participant_id(request) -> str:
-        """Extract unique participant identifier from the request."""
-        return request.COOKIES.get(settings.LOBBY_COOKIE_NAME, str(uuid.uuid4()))
+        """Extract unique participant identifier from the request.
+
+        The cookie comes from the client and the identifier becomes the LiveKit
+        identity of an anonymous participant: only a UUID is kept, in its
+        canonical form, anything else gets a new one."""
+        try:
+            return str(uuid.UUID(request.COOKIES.get(settings.LOBBY_COOKIE_NAME)))
+        except (TypeError, ValueError):
+            return str(uuid.uuid4())
 
     @staticmethod
     def prepare_response(response, participant_id):
