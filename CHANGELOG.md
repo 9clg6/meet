@@ -29,6 +29,7 @@ and this project adheres to
 
 ### Fixed
 
+- 🐛(backend) a LiveKit room token names a user only through a proof signed by Meet
 - 🐛(backend) a live run without a summary is still delivered (document, Twake Drive, recap email)
 - 🐛(mail) without a summary the recap email announces the transcript alone, and the document is named after it
 - 🐛(backend) the late joiners' catch-up summary also needs the summary capability
