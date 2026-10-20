@@ -14,6 +14,7 @@ and this project adheres to
 
 ### Fixed
 
+- 🐛(backend) a LiveKit room token names a user only through a proof signed by Meet
 - 🐛(backend) make linto_state migration idempotent to self-heal history desync
 - 🐛(mail) load i18n tags in transcription email so it renders
 
