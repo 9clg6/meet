@@ -9,6 +9,7 @@ from unittest import mock
 from django.core.cache import cache
 
 import pytest
+from livekit.api import TokenVerifier
 from rest_framework.test import APIClient
 
 from ... import utils
@@ -290,6 +291,37 @@ def test_request_entry_authenticated_user_public_room(settings):
     # Verify lobby cache is still empty after the request
     lobby_keys = cache.keys(f"mocked-cache-prefix_{room.id}_*")
     assert not lobby_keys
+
+
+def test_request_entry_public_room_anonymous_never_gets_the_identity_of_a_user(
+    settings,
+):
+    """The lobby cookie of an anonymous participant becomes their LiveKit
+    identity: a cookie equal to the sub of a user is replaced, and the token
+    names no user."""
+    UserFactory(sub="2f7f162f-e7d1-421b-90e7-02bfbfbf8def")
+    room = RoomFactory(access_level=RoomAccessLevel.PUBLIC)
+    client = APIClient()
+
+    settings.LOBBY_COOKIE_NAME = "mocked-cookie"
+    client.cookies.load({"mocked-cookie": "2f7f162f-e7d1-421b-90e7-02bfbfbf8def"})
+
+    response = client.post(
+        f"/api/v1.0/rooms/{room.id}/request-entry/",
+        {"username": "user1"},
+    )
+
+    assert response.status_code == 200
+    participant_id = response.json()["id"]
+    assert participant_id != "2f7f162f-e7d1-421b-90e7-02bfbfbf8def"
+    assert response.cookies.get("mocked-cookie").value == participant_id
+
+    claims = TokenVerifier(
+        api_key=settings.LIVEKIT_CONFIGURATION["api_key"],
+        api_secret=settings.LIVEKIT_CONFIGURATION["api_secret"],
+    ).verify(response.json()["livekit"]["token"])
+    assert claims.identity == participant_id
+    assert "user_id" not in claims.attributes
 
 
 def test_request_entry_waiting_participant_public_room(settings):

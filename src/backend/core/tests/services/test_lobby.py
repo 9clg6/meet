@@ -184,6 +184,22 @@ def test_get_or_create_participant_id_new(mock_uuid4, lobby_service):
     mock_uuid4.assert_called_once()
 
 
+@mock.patch.object(uuid, "uuid4", return_value="generated-id")
+def test_get_or_create_participant_id_not_the_sub_of_a_user(mock_uuid4, lobby_service):
+    """A cookie equal to the sub of a user, the LiveKit identity of that user,
+    is not used: a new identifier is created."""
+    UserFactory(sub="2f7f162f-e7d1-421b-90e7-02bfbfbf8def")
+    request = mock.Mock()
+    request.COOKIES = {
+        settings.LOBBY_COOKIE_NAME: "2f7f162f-e7d1-421b-90e7-02bfbfbf8def"
+    }
+
+    participant_id = lobby_service._get_or_create_participant_id(request)
+
+    assert participant_id == "generated-id"
+    mock_uuid4.assert_called_once()
+
+
 def test_prepare_response_existing_cookie(lobby_service, participant_id):
     """Test response preparation with existing cookie."""
     response = HttpResponse()
