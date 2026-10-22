@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("core", "0023_merge_upstream_and_linto_0022"),
+        ("core", "0024_user_twake_instance"),
     ]
 
     operations = [
