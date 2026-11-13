@@ -24,8 +24,6 @@ vi.mock('@/features/auth/api/useSyncUserPreferencesWithBackend', () => ({
   useSyncUserPreferencesWithBackend: () => {},
 }))
 
-const UUID = '3f2b8c1e-9d4a-4e0b-8a57-6c1d2e9f0a11'
-
 describe('cozy bridge', () => {
   afterEach(() => {
     cleanup()
@@ -39,8 +37,8 @@ describe('cozy bridge', () => {
     expect(bridge.created).toHaveBeenCalled()
   })
 
-  it('is not mounted under /embed: that page talks to Chat only through twake-meet-embed', () => {
-    window.history.pushState({}, '', `/embed/${UUID}`)
+  it('is not mounted under /intents: that page talks to Chat only through twake-meet-embed', () => {
+    window.history.pushState({}, '', `/intents`)
     render(<AppInitialization />)
     expect(bridge.created).not.toHaveBeenCalled()
   })
