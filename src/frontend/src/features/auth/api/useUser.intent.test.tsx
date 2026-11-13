@@ -16,8 +16,6 @@ vi.mock('@/api/useConfig', () => ({
   }),
 }))
 
-const UUID = '3f2b8c1e-9d4a-4e0b-8a57-6c1d2e9f0a11'
-
 const lookUpUser = async () => {
   const client = new QueryClient()
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -34,8 +32,8 @@ describe('silent login', () => {
     window.history.pushState({}, '', '/')
   })
 
-  it('is off under /embed: an IdP redirect would break the iframe', async () => {
-    window.history.pushState({}, '', `/embed/${UUID}`)
+  it('is off under /intents: an IdP redirect would break the iframe', async () => {
+    window.history.pushState({}, '', `/intents`)
     expect(await lookUpUser()).toMatchObject({ attemptSilent: false })
   })
 

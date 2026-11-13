@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OptionsMenuItems } from './OptionsMenuItems'
 
 /*
- * The options menu of the call. Framed by Chat (/embed/<uuid>) there is no Meet
+ * The options menu of the call. Framed by Chat (/intents) there is no Meet
  * session: Picture-in-picture, the transcript and the screen recording
  * (protocol twake-meet-embed v1: "no picture-in-picture, no recording/
  * transcript/admin actions that need a Meet session") are not offered, even
@@ -71,30 +71,30 @@ describe('options menu', () => {
     window.history.pushState({}, '', '/')
   })
 
-  describe('framed by Chat (/embed)', () => {
+  describe('framed by Chat (/intents)', () => {
     it('does not offer picture-in-picture', () => {
-      renderAt('/embed/3f2b8c1e-9d4a-4e0b-8a57-6c1d2e9f0a11')
+      renderAt('/intents')
       expect(entry(/picture/i)).toBeNull()
     })
 
     it('does not offer the transcript', () => {
-      renderAt('/embed/3f2b8c1e-9d4a-4e0b-8a57-6c1d2e9f0a11')
+      renderAt('/intents')
       expect(entry(/transcript/i)).toBeNull()
     })
 
     it('does not offer the screen recording', () => {
-      renderAt('/embed/3f2b8c1e-9d4a-4e0b-8a57-6c1d2e9f0a11')
+      renderAt('/intents')
       expect(entry(/screenRecording/i)).toBeNull()
     })
 
     it('keeps the entries that need no session', () => {
-      renderAt('/embed/3f2b8c1e-9d4a-4e0b-8a57-6c1d2e9f0a11')
+      renderAt('/intents')
       expect(entry(/full screen/i)).not.toBeNull()
       expect(entry(/effects/i)).not.toBeNull()
     })
   })
 
-  describe('outside the embed', () => {
+  describe('outside the intent page', () => {
     it('still offers picture-in-picture, the transcript and the screen recording', () => {
       renderAt('/some-room')
       expect(entry(/picture/i)).not.toBeNull()
