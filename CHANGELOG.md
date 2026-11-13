@@ -10,6 +10,7 @@ and this project adheres to
 
 ### Added
 
+- ✨(backend) POST stack-token/ exchanges the session id token for a Twake stack access token
 - ✨(backend) rooms/{id}/linto/catchup relays the late joiner's summary from Studio
 - ✨(frontend) add jittered exponential backoff to LiveKit reconnections
 - ✨(frontend) tell participants when a recording is interrupted
