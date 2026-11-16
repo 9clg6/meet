@@ -58,3 +58,14 @@ for `/intents`). `/intents/signed-in` is a popup and must **not** be framable.
 This repository sets no framing header itself (the Django
 `XFrameOptionsMiddleware` and the nginx of `src/frontend/default.conf` add
 none): they come from the deployment (ingress), where `/intents` is allowed.
+
+## Deployment settings
+
+All of these are deployment settings, none is in this repository:
+
+- **Scope and claim**: the SSO client of Meet asks the scope `workplaceFqdn` (`OIDC_RP_SCOPES`) and Meet reads it into `user.twake_instance` (`OIDC_USERINFO_TWAKE_INSTANCE_FIELD`). Users get it at their next sign-in. Without it `stack-token` answers 409.
+- **Id token**: `OIDC_STORE_ID_TOKEN` stays `True` (the default): the exchange reads the id token of the session.
+- **Stack**: the SSO client of Meet is a key of `oidc.app_token_exchange` of the context of the instance, bound to the Visio app (installed from a registry), and the id token carries `sid`.
+- **Flag**: `visio_service_url` of the instance is the origin of Meet, not the URL of `/intents`.
+- **Framing**: see above.
+- **Sign-in popup**: the Meet session cookie must reach the framed page, so Chat and Meet are on the same site (for example both under `*.example.org`). On different sites the frame has no session and the popup cannot give it one.
