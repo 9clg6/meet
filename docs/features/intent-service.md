@@ -69,7 +69,7 @@ All of these are deployment settings, none is in this repository:
 - **Scope and claim**: the SSO client of Meet asks the scope `workplaceFqdn` (`OIDC_RP_SCOPES`) and Meet reads it into `user.twake_instance` (`OIDC_USERINFO_TWAKE_INSTANCE_FIELD`). Users get it at their next sign-in. Without it `stack-token` answers 409.
 - **Id token**: `OIDC_STORE_ID_TOKEN` stays `True` (the default): the exchange reads the id token of the session.
 - **Stack**: in the context of the instance, `allow_app_token_exchange: true` and an `app_token_exchange` entry keyed by the SSO client of Meet (the `aud` of its id token), with `software_id: registry://visio` (the app must be installed from a registry) and `instance_claim: workplaceFqdn`. The id token must carry `sid`.
-- **Flag**: `visio_service_url` of the instance is the origin of Meet, not the URL of `/intents`.
+- **Flag**: `visio.embedded-app-url` of the instance (the flag Visio already uses for the root of Meet) is the origin of Meet, not the URL of `/intents`; the stack appends the `href` itself. Without it the stack serves the intent from the Visio subdomain, so it must be set on each instance. The manifest of Visio needs no permission on a doctype for this intent.
 - **Framing**: see above.
 - **Sign-in popup**: the Meet session cookie must reach the framed page, so Chat and Meet are on the same site (for example both under `*.example.org`). On different sites the frame has no session and the popup cannot give it one.
 - **Intent id**: the page ignores an `intent` that is not a plain identifier (letters, digits, `-` and `_`, 128 characters at most), and never sends the stack token outside the platform URL.
