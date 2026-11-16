@@ -289,16 +289,27 @@ export const Conference = ({
     userPreferencesSnap.is_auto_mute_large_room_enabled,
   ])
 
+  // LiveKitRoom lists its callbacks in the deps of its effects: a new function
+  // on each render would reconnect the room. The callbacks passed to it are
+  // stable and read the latest embed and handleConnected through refs.
+  const embedRef = useRef(embed)
+  const handleConnectedRef = useRef(handleConnected)
+  useEffect(() => {
+    embedRef.current = embed
+    handleConnectedRef.current = handleConnected
+  }, [embed, handleConnected])
+
   // Synchronous: the embedding reports as soon as LiveKit is connected
-  const onConnected = () => {
-    embed?.onConnected()
-    void handleConnected()
-  }
+  const onConnected = useCallback(() => {
+    embedRef.current?.onConnected()
+    void handleConnectedRef.current()
+  }, [])
 
   const handleDisconnected = useCallback(
     (reason?: DisconnectReason) => {
-      if (embed) {
-        if (room === currentRoom.current) embed.onDisconnected(reason)
+      const currentEmbed = embedRef.current
+      if (currentEmbed) {
+        if (room === currentRoom.current) currentEmbed.onDisconnected(reason)
         return
       }
       navigateTo(
@@ -312,13 +323,13 @@ export const Conference = ({
         }
       )
     },
-    [roomId, embed, room]
+    [roomId, room]
   )
 
-  const handleLiveKitError = (e: Error) => {
+  const handleLiveKitError = useCallback((e: Error) => {
     handleError(e)
-    if (embed && !isBenignError(e)) embed.onError(e)
-  }
+    if (!isBenignError(e)) embedRef.current?.onError(e)
+  }, [])
 
   useEffect(() => {
     if (!embed) void captureMediaEvent('visit-room', { slug: roomId })
