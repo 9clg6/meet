@@ -1,4 +1,5 @@
-import Intents, { type IntentServiceAPI } from 'cozy-interapp'
+import * as interapp from 'cozy-interapp'
+import type { IntentServiceAPI } from 'cozy-interapp'
 import { ApiError } from '@/api/ApiError'
 import { fetchApi } from '@/api/fetchApi'
 import { authUrl } from '@/features/auth/utils/authUrl'
@@ -83,6 +84,19 @@ const isStackToken = (token: Partial<StackToken> | undefined) =>
   typeof token?.access_token === 'string' &&
   typeof token.platform_url === 'string'
 
+type IntentsClass = typeof interapp.default
+const isClass = (value: unknown): value is IntentsClass =>
+  typeof value === 'function'
+
+// ponytail: build interop of a CJS package. The production build may hand
+// `default` as the exports object ({ default: Intents }), not the class.
+const intentsClass = (): IntentsClass | undefined => {
+  const exported: unknown = interapp.default
+  if (isClass(exported)) return exported
+  const inner = (exported as { default?: unknown } | null)?.default
+  return isClass(inner) ? inner : undefined
+}
+
 // One service per page: a second start (React StrictMode runs an Effect twice)
 // ends the first one
 let active: HostBridge | null = null
@@ -151,11 +165,14 @@ export const startIntentService = (
     }, JOIN_TIMEOUT_MS)
     let api: IntentServiceAPI
     try {
+      const Intents = intentsClass()
+      if (!Intents) throw new Error('cozy-interapp: Intents class not found')
       api = await new Intents({ fetch: platformFetch(token) }).createService(
         intent,
         window
       )
-    } catch {
+    } catch (error) {
+      console.error(error)
       return fail('unsupported')
     }
     // Too late (the page said unsupported) or gone: nothing is read
