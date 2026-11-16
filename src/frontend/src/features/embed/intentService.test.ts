@@ -135,6 +135,41 @@ describe('startIntentService', () => {
     )
   })
 
+  describe('the intent of the URL', () => {
+    it.each([
+      ['a path', '../files/x'],
+      ['a slash', 'a/b'],
+      ['a space', 'a b'],
+      ['a query', 'a?b'],
+      ['a host', '//evil.com'],
+      ['a dotted host', '.evil.com'],
+      ['nothing', ''],
+      ['more than 128 characters', 'a'.repeat(129)],
+    ])('is ignored when it holds %s: no call, no service', async (_n, bad) => {
+      window.history.pushState(
+        {},
+        '',
+        `/intents?intent=${encodeURIComponent(bad)}`
+      )
+      const h = handlers()
+      expect(startIntentService(h)).toBeNull()
+      await flush()
+      expect(stackToken).not.toHaveBeenCalled()
+      expect(interapp.constructed).toBe(0)
+      expect(interapp.createService).not.toHaveBeenCalled()
+    })
+
+    it.each(['9761c01d09e19b7797a8ce7dd501c9d7', 'intent-42'])(
+      'is served when it is a plain identifier (%s)',
+      async (id) => {
+        window.history.pushState({}, '', `/intents?intent=${id}`)
+        const { bridge } = await start()
+        expect(bridge).not.toBeNull()
+        expect(interapp.createService).toHaveBeenCalledWith(id, window)
+      }
+    )
+  })
+
   describe('the stack token', () => {
     it('is asked with a POST on stack-token, through the api helper', async () => {
       await start()
@@ -176,6 +211,35 @@ describe('startIntentService', () => {
       )
       expect(JSON.stringify(init.headers).toLowerCase()).toContain('json')
       expect(JSON.parse(init.body)).toEqual({ a: 1 })
+    })
+
+    it.each([
+      '.evil.com/x',
+      '//evil.com/x',
+      '@evil.com',
+      'http://evil.com',
+      '',
+    ])('never leaves the platform: the path %j is refused', async (path) => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+      await start()
+      await expect(interapp.options!.fetch('GET', path)).rejects.toBeDefined()
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('asks exactly platform_url + path for an absolute path of the platform', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      await start()
+      await interapp.options!.fetch('GET', '/intents/abc')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const [url, init] = fetchMock.mock.calls[0]
+      expect(url).toBe(`${PLATFORM}/intents/abc`)
+      expect(init.headers.Authorization).toBe(`Bearer ${STACK}`)
     })
 
     it('is kept out of the URL, of every storage and of the console', async () => {
@@ -252,6 +316,15 @@ describe('startIntentService', () => {
       expect(interapp.service.notifyReadyToUse).not.toHaveBeenCalled()
       expect(sent()).toEqual([{ event: 'error', code: 'unsupported' }])
       expect(interapp.service.terminate).toHaveBeenCalledTimes(1)
+    })
+
+    it('logs the error and says unsupported when getData rejects', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      interapp.service.getData.mockRejectedValue(new Error('boom'))
+      const { h } = await start()
+      expect(error).toHaveBeenCalled()
+      expect(h.onJoin).not.toHaveBeenCalled()
+      expect(sent()).toEqual([{ event: 'error', code: 'unsupported' }])
     })
 
     it.each([null, undefined, 'room', [data()]])(
@@ -391,10 +464,15 @@ describe('startIntentService', () => {
   // the bridge never calls window.open by itself. It hands the page a
   // signIn() through onNeedsSignIn(signIn); the page calls it from a click.
   describe('a session that is missing', () => {
-    const signedInMessage = (origin = window.location.origin) => {
-      window.dispatchEvent(
-        new MessageEvent('message', { data: SIGNED_IN, origin })
-      )
+    // Sent by the popup the page opened, unless said otherwise (jsdom takes
+    // only a real Window as `source` in the init: set it afterwards)
+    const signedInMessage = (
+      origin = window.location.origin,
+      source: unknown = popup
+    ) => {
+      const event = new MessageEvent('message', { data: SIGNED_IN, origin })
+      Object.defineProperty(event, 'source', { value: source })
+      window.dispatchEvent(event)
     }
 
     beforeEach(() => {
@@ -464,6 +542,15 @@ describe('startIntentService', () => {
       const { signIn } = await startAndClick()
       signIn()
       signedInMessage('https://evil.example.net')
+      await flush()
+      expect(stackToken).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores a signed-in message of its own origin from another window than the popup', async () => {
+      const { signIn } = await startAndClick()
+      signIn()
+      signedInMessage(window.location.origin, window)
+      signedInMessage(window.location.origin, null)
       await flush()
       expect(stackToken).toHaveBeenCalledTimes(1)
     })
