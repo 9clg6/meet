@@ -7,8 +7,8 @@ import type { HostBridge, HostJoin } from './embedEvents'
 
 /*
  * Meet as the *service* of a cozy intent: /intents?intent=<id> is framed by
- * cozy-stack, and cozy-interapp carries the exchange with the host (data in,
- * results out). The
+ * the page that opens the intent (cozy-interapp puts the iframe there), and
+ * cozy-interapp carries the exchange with the host (data in, results out). The
  * stack token and the LiveKit token are never logged, stored or put in a URL.
  */
 
@@ -45,6 +45,17 @@ export type IntentHandlers = {
 }
 
 type StackToken = { access_token: string; platform_url: string }
+
+// A 401, or the 409 of a session from before the `workplaceFqdn` scope (it has
+// no twake_instance; signing in again fills it)
+const needsSignIn = (error: unknown) =>
+  error instanceof ApiError &&
+  (error.statusCode === 401 ||
+    (error.statusCode === 409 &&
+      typeof error.body === 'object' &&
+      error.body !== null &&
+      'error' in error.body &&
+      error.body.error === 'no_twake_instance'))
 
 const parseData = (data: unknown): IntentJoin | null => {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) {
@@ -214,10 +225,14 @@ export const startIntentService = (
       token = await fetchApi<StackToken>('stack-token/', { method: 'POST' })
     } catch (error) {
       if (isClosed) return
-      const isUnauthenticated =
+      if (!needsSignIn(error)) return fail('unreachable')
+      if (!isRetry) return handlers.onNeedsSignIn(signIn)
+      // after signing in again: a 401 is `unauthenticated`, a 409 `unreachable`
+      return fail(
         error instanceof ApiError && error.statusCode === 401
-      if (!isUnauthenticated) return fail('unreachable')
-      return isRetry ? fail('unauthenticated') : handlers.onNeedsSignIn(signIn)
+          ? 'unauthenticated'
+          : 'unreachable'
+      )
     }
     if (isClosed) return
     if (!isStackToken(token)) return fail('unreachable')

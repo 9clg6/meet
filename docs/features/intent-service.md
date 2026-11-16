@@ -46,8 +46,10 @@ A 401 on the stack token shows a "Sign in to Meet" button (a popup needs a
 click). It opens the Meet sign-in in a popup that comes back to
 `/intents/signed-in`, which tells the page (`postMessage` to its own origin)
 and closes itself. The page then asks for the stack token once more; a second
-401 is the error `unauthenticated`. A blocked popup is `popup_blocked`. These
-errors, and `unreachable` (409, 400, 5xx, network), are shown by the page
+401 is the error `unauthenticated`. A 409 `no_twake_instance` (a session from
+before the `workplaceFqdn` scope: signing in again fills `twake_instance`)
+shows the same button as a 401; a second 409 is `unreachable`. A blocked popup is `popup_blocked`. These
+errors, and `unreachable` (any other 409, 400, 5xx, network), are shown by the page
 itself: no service exists yet to tell the host.
 
 ## Framing
