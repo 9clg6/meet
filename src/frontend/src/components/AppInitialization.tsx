@@ -18,7 +18,7 @@ const isOriginAllowed = (parentOrigin: string): boolean => {
 
 export const AppInitialization = () => {
   const { data } = useConfig()
-  // No cookies, consent or cozy bridge in the frame of another site
+  // No analytics or cozy bridge on /intents (a service framed by the host)
   const isEmbed = isEmbedPage()
   useSyncUserPreferencesWithBackend()
 

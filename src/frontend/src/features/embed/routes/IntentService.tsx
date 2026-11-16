@@ -73,7 +73,8 @@ const InRoom = ({ room, children }: { room: string; children: ReactNode }) => {
 
 /**
  * Meet as the service of a cozy intent: waits for the data of the host, then
- * enters the call with its LiveKit token, with no Meet session. It
+ * enters the call with the LiveKit token of the host (the Meet session, if
+ * any, only serves to exchange the platform token). It
  * only shows a sign-in button (no session) or an error that no service could
  * tell the host; nothing once the call is over.
  */
