@@ -13,7 +13,7 @@ import { PictureInPictureMenuItem } from '@/features/rooms/livekit/components/co
 
 // @todo try refactoring it to use MenuList component
 export const OptionsMenuItems = () => {
-  // Framed by Chat there is no Meet session: no PiP, transcript or recording
+  // PiP, transcript and recording are Meet features not planned in the /intents frame
   const isEmbed = isEmbedPage()
   return (
     <RACMenu
