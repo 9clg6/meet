@@ -7,6 +7,9 @@ Twake stack (cozy-stack) access token.
 
 import json
 
+from django.conf import settings
+from django.utils.crypto import get_random_string
+
 import pytest
 import requests
 import responses
@@ -23,10 +26,10 @@ EXCHANGE_URL = f"https://{INSTANCE}/auth/token_exchange"
 SECRETS = ("refresh-secret", "client-id-secret", "client-secret-secret")
 
 
-def login(instance=INSTANCE, id_token="the-id-token"):
+def login(instance=INSTANCE, id_token="the-id-token", **client_options):
     """A client logged in with a session, holding or not an OIDC id token."""
     user = UserFactory()
-    client = APIClient()
+    client = APIClient(**client_options)
     client.force_login(user)
     # update() skips the model validation: stored values are untrusted anyway.
     # It comes after the login, whose save() validates the model.
@@ -189,3 +192,29 @@ def test_stack_token_untrusted_instance_is_never_fetched(instance):
 
     assert response.status_code in (400, 409)
     assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_stack_token_session_without_csrf_token():
+    """A session-authenticated POST without a CSRF token is refused, nothing is exchanged."""
+    responses.post(EXCHANGE_URL, json=stack_body(), status=200)
+
+    response = login(enforce_csrf_checks=True).post(URL)
+
+    assert response.status_code == 403
+    assert response.json()["detail"].startswith("CSRF Failed")
+    assert len(responses.calls) == 0
+
+
+@responses.activate
+def test_stack_token_session_with_csrf_token():
+    """With a valid CSRF token the normal flow still answers 200."""
+    responses.post(EXCHANGE_URL, json=stack_body(), status=200)
+    client = login(enforce_csrf_checks=True)
+    csrf_secret = get_random_string(32)
+    client.cookies[settings.CSRF_COOKIE_NAME] = csrf_secret
+
+    response = client.post(URL, HTTP_X_CSRFTOKEN=csrf_secret)
+
+    assert response.status_code == 200
+    assert response.json()["platform_url"] == f"https://{INSTANCE}"
