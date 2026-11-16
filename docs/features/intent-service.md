@@ -52,9 +52,10 @@ itself: no service exists yet to tell the host.
 
 ## Framing
 
-`/intents` is framed by cozy-stack, so Meet must allow it in its
-`Content-Security-Policy: frame-ancestors` (the origins of the Twake platforms
-for `/intents`). `/intents/signed-in` is a popup and must **not** be framable.
+`/intents` is framed by the page that opens the intent (cozy-interapp puts the
+iframe in that page, with the URL the stack gave), not by cozy-stack: Meet must
+allow the origin of that page (Twake Chat, or whichever app opens the intent)
+in `Content-Security-Policy: frame-ancestors` for `/intents`. `/intents/signed-in` is a popup and must **not** be framable.
 This repository sets no framing header itself (the Django
 `XFrameOptionsMiddleware` and the nginx of `src/frontend/default.conf` add
 none): they come from the deployment (ingress), where `/intents` is allowed.
@@ -65,7 +66,8 @@ All of these are deployment settings, none is in this repository:
 
 - **Scope and claim**: the SSO client of Meet asks the scope `workplaceFqdn` (`OIDC_RP_SCOPES`) and Meet reads it into `user.twake_instance` (`OIDC_USERINFO_TWAKE_INSTANCE_FIELD`). Users get it at their next sign-in. Without it `stack-token` answers 409.
 - **Id token**: `OIDC_STORE_ID_TOKEN` stays `True` (the default): the exchange reads the id token of the session.
-- **Stack**: the SSO client of Meet is a key of `oidc.app_token_exchange` of the context of the instance, bound to the Visio app (installed from a registry), and the id token carries `sid`.
+- **Stack**: in the context of the instance, `allow_app_token_exchange: true` and an `app_token_exchange` entry keyed by the SSO client of Meet (the `aud` of its id token), with `software_id: registry://visio` (the app must be installed from a registry) and `instance_claim: workplaceFqdn`. The id token must carry `sid`.
 - **Flag**: `visio_service_url` of the instance is the origin of Meet, not the URL of `/intents`.
 - **Framing**: see above.
 - **Sign-in popup**: the Meet session cookie must reach the framed page, so Chat and Meet are on the same site (for example both under `*.example.org`). On different sites the frame has no session and the popup cannot give it one.
+- **Intent id**: the page ignores an `intent` that is not a plain identifier (letters, digits, `-` and `_`, 128 characters at most), and never sends the stack token outside the platform URL.
