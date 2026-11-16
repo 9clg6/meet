@@ -21,6 +21,9 @@ const JOIN_TIMEOUT_MS = 10_000
 // How often the sign-in popup is looked at, to know it was closed
 const POPUP_POLL_MS = 500
 
+// The id of the intent, as the host sends it in the URL
+const INTENT_ID = /^[A-Za-z0-9_-]{1,128}$/
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /** What the page itself shows when no service exists to tell the host. */
@@ -67,6 +70,8 @@ const parseData = (data: unknown): IntentJoin | null => {
 const platformFetch =
   ({ access_token, platform_url }: StackToken) =>
   async (method: string, path: string, body?: unknown) => {
+    // Never leave platform_url: one leading slash, not `//host`
+    if (!/^\/(?!\/)/.test(path)) throw new Error('Invalid platform path')
     const response = await fetch(`${platform_url}${path}`, {
       method,
       headers: {
@@ -119,7 +124,7 @@ export const startIntentService = (
   handlers: IntentHandlers
 ): HostBridge | null => {
   const intent = new URLSearchParams(window.location.search).get('intent')
-  if (!intent) return null
+  if (!intent || !INTENT_ID.test(intent)) return null
   active?.close()
 
   let service: IntentServiceAPI | null = null
@@ -190,8 +195,9 @@ export const startIntentService = (
     let join: IntentJoin | null = null
     try {
       join = parseData(await api.getData())
-    } catch {
-      // unreadable data is unsupported data
+    } catch (error) {
+      // unreadable data is unsupported data (the error holds no secret)
+      console.error(error)
     }
     if (isClosed || isTimedOut) return
     clearTimeout(timer)
@@ -233,6 +239,7 @@ export const startIntentService = (
     const onMessage = (event: MessageEvent) => {
       const data = event.data as Record<string, unknown> | null
       const isSignedIn =
+        event.source === popup &&
         event.origin === window.location.origin &&
         data?.source === SIGNED_IN.source &&
         data.type === SIGNED_IN.type
