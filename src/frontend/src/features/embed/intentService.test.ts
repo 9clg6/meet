@@ -631,8 +631,7 @@ describe('startIntentService', () => {
   // A session older than the workplaceFqdn scope has no twake_instance: the
   // server answers 409 no_twake_instance, and signing in again fills it
   describe('a session without a twake instance', () => {
-    const noInstance = () =>
-      new ApiError(409, { error: 'no_twake_instance' })
+    const noInstance = () => new ApiError(409, { error: 'no_twake_instance' })
 
     it('asks the page for a sign-in on a 409 no_twake_instance, as on a 401', async () => {
       stackToken.mockReset()
