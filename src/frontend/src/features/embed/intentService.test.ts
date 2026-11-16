@@ -628,6 +628,64 @@ describe('startIntentService', () => {
     })
   })
 
+  // A session older than the workplaceFqdn scope has no twake_instance: the
+  // server answers 409 no_twake_instance, and signing in again fills it
+  describe('a session without a twake instance', () => {
+    const noInstance = () =>
+      new ApiError(409, { error: 'no_twake_instance' })
+
+    it('asks the page for a sign-in on a 409 no_twake_instance, as on a 401', async () => {
+      stackToken.mockReset()
+      stackToken.mockRejectedValue(noInstance())
+      const { h } = await start()
+      expect(h.onNeedsSignIn).toHaveBeenCalledTimes(1)
+      expect(typeof h.onNeedsSignIn.mock.calls[0][0]).toBe('function')
+      expect(h.onError).not.toHaveBeenCalled()
+      expect(window.open).not.toHaveBeenCalled()
+      expect(interapp.createService).not.toHaveBeenCalled()
+    })
+
+    it('asks again, once, after the sign-in, and joins when the instance is known', async () => {
+      stackToken.mockReset()
+      stackToken.mockRejectedValueOnce(noInstance())
+      answerStackToken()
+      const { h } = await start()
+      h.onNeedsSignIn.mock.calls[0][0]()
+      expect(window.open).toHaveBeenCalledTimes(1)
+      popup.closed = true
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(stackToken).toHaveBeenCalledTimes(2)
+      expect(h.onJoin).toHaveBeenCalledTimes(1)
+    })
+
+    it('says unreachable, not unauthenticated, and does not loop, when it is still 409', async () => {
+      stackToken.mockReset()
+      stackToken.mockRejectedValue(noInstance())
+      const { h } = await start()
+      h.onNeedsSignIn.mock.calls[0][0]()
+      popup.closed = true
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(stackToken).toHaveBeenCalledTimes(2)
+      expect(h.onNeedsSignIn).toHaveBeenCalledTimes(1)
+      expect(window.open).toHaveBeenCalledTimes(1)
+      expect(h.onError).toHaveBeenCalledTimes(1)
+      expect(h.onError).toHaveBeenCalledWith('unreachable')
+    })
+
+    it.each([
+      ['another error code', { error: 'other' }],
+      ['no error code', {}],
+      ['no body', undefined],
+    ])('stays unreachable on a 409 with %s', async (_n, body) => {
+      stackToken.mockReset()
+      stackToken.mockRejectedValue(new ApiError(409, body))
+      const { h } = await start()
+      expect(h.onError).toHaveBeenCalledWith('unreachable')
+      expect(h.onNeedsSignIn).not.toHaveBeenCalled()
+      expect(window.open).not.toHaveBeenCalled()
+    })
+  })
+
   describe('a stack token that cannot be had', () => {
     it.each([
       [409, 'no twake instance'],
