@@ -970,15 +970,78 @@ class TestNormalizeProfile:
             "_id": "p",
             "config": {
                 "name": "From config",
-                "availableTranslations": {"discrete": ["en"], "external": ["it"]},
+                "availableTranslations": {
+                    "discrete": ["en", "de"],
+                    "external": [
+                        {"translator": "gemma", "languages": ["it", "en"]},
+                        {"translator": "other", "languages": ["pl"]},
+                    ],
+                },
             },
         }
         assert normalize_profile(profile) == {
             "id": "p",
             "name": "From config",
             "languages": [],
-            "translations": ["en", "it"],
+            "translations": ["en", "de", "it", "pl"],
         }
+
+    def test_external_translator_languages_are_the_targets(self):
+        """The production Session-API answer: no discrete target, one online
+        translator. Its languages reach the panel as codes, never the
+        translator object, which blanked the meeting page."""
+        profile = {
+            "id": 26,
+            "config": {
+                "name": "LinTO Live",
+                "languages": [{"candidate": "fr-FR"}, {"candidate": "en-US"}],
+                "availableTranslations": {
+                    "discrete": [],
+                    "external": [
+                        {"translator": "gemma", "languages": ["en", "fr", "de"]}
+                    ],
+                },
+            },
+        }
+        assert normalize_profile(profile) == {
+            "id": "26",
+            "name": "LinTO Live",
+            "languages": ["fr-FR", "en-US"],
+            "translations": ["en", "fr", "de"],
+        }
+
+    def test_stored_target_objects_give_their_target(self):
+        profile = {
+            "id": 7,
+            "config": {
+                "availableTranslations": [
+                    "es",
+                    {"target": "en", "mode": "discrete"},
+                    {"target": "es"},
+                ]
+            },
+        }
+        assert normalize_profile(profile)["translations"] == ["es", "en"]
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            {"discrete": None, "external": [{"translator": "t"}]},
+            {"external": [{"translator": "t", "languages": "en"}]},
+            [None, 3, {"mode": "external"}, ["en"], ""],
+            "en",
+        ],
+    )
+    def test_entries_that_are_not_codes_are_dropped(self, raw):
+        profile = {"id": 1, "config": {"availableTranslations": raw}}
+        assert not normalize_profile(profile)["translations"]
+
+    def test_languages_that_are_not_codes_are_dropped(self):
+        profile = {
+            "id": 1,
+            "config": {"languages": [{"candidate": "fr-FR"}, {}, None, "en-US"]},
+        }
+        assert normalize_profile(profile)["languages"] == ["fr-FR", "en-US"]
 
 
 class TestQuickMeetingProfiles:
@@ -990,6 +1053,29 @@ class TestQuickMeetingProfiles:
         request = responses.calls[0].request
         assert "quickMeeting=true" in request.url
         assert request.headers["Authorization"] == "Bearer static-token"
+
+    @responses.activate
+    def test_online_translators_are_listed_as_target_codes(self, run_settings):
+        responses.get(
+            PROFILES_URL,
+            json=[
+                {
+                    "id": 26,
+                    "config": {
+                        "name": "LinTO Live",
+                        "languages": ["fr-FR", "en-US"],
+                        "availableTranslations": {
+                            "discrete": [],
+                            "external": [
+                                {"translator": "gemma", "languages": ["en", "fr"]}
+                            ],
+                        },
+                    },
+                }
+            ],
+        )
+        (profile,) = BotTranscriptionService().quick_meeting_profiles(UserFactory())
+        assert profile["translations"] == ["en", "fr"]
 
     @responses.activate
     def test_studio_failure_raises(self, run_settings):

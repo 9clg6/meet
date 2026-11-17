@@ -146,6 +146,38 @@ def studio_session_name(room):
     return f"@meet-{room.id}"
 
 
+def _translation_codes(raw):
+    """The translation target codes of a profile, whatever shape Studio sends.
+
+    Mirrors Studio's ``normalizeAvailableTranslations``. A list holds codes or
+    ``{"target": code}`` entries (stored profiles). Session-API renders
+    ``{"discrete": [codes], "external": [{"translator": name, "languages":
+    [codes]}]}``, one ``external`` entry per online translator: its languages
+    are targets too. Anything else is dropped, so the panel only gets codes.
+    """
+    if isinstance(raw, dict):
+        entries = [
+            entry
+            for group in (raw.get("discrete"), raw.get("external"))
+            if isinstance(group, list)
+            for entry in group
+        ]
+    elif isinstance(raw, list):
+        entries = raw
+    else:
+        entries = []
+    codes = []
+    for entry in entries:
+        if isinstance(entry, str):
+            codes.append(entry)
+        elif isinstance(entry, dict):
+            codes.append(entry.get("target"))
+            languages = entry.get("languages")
+            if isinstance(languages, list):
+                codes.extend(languages)
+    return list(dict.fromkeys(code for code in codes if isinstance(code, str) and code))
+
+
 def normalize_profile(profile):
     """A Studio transcriber profile as the panel shows it."""
     config = profile.get("config") or {}
@@ -159,17 +191,11 @@ def normalize_profile(profile):
         or config.get("translations")
         or []
     )
-    if isinstance(raw, dict):
-        translations = [
-            code for group in raw.values() if isinstance(group, list) for code in group
-        ]
-    else:
-        translations = list(raw)
     return {
         "id": str(profile.get("_id") or profile.get("id") or ""),
         "name": profile.get("name") or config.get("name") or "",
-        "languages": [lang for lang in languages if lang],
-        "translations": [code for code in translations if code],
+        "languages": [lang for lang in languages if isinstance(lang, str) and lang],
+        "translations": _translation_codes(raw),
     }
 
 
