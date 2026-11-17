@@ -8,6 +8,7 @@ import { useRoomContext, useTrackToggle } from '@livekit/components-react'
 import { useRaisedHand } from '@/features/rooms/livekit/hooks/useRaisedHand'
 import { useTranslation } from 'react-i18next'
 import { Track } from 'livekit-client'
+import { screenSharePublishOptions } from '@/features/rooms/utils/screenSharePublishOptions'
 
 type PipOverflowItemsProps = {
   overflowControls: Set<CollapsibleControl>
@@ -25,6 +26,9 @@ export const PipOptionsMenuItems = ({
     useTrackToggle({
       source: Track.Source.ScreenShare,
       captureOptions: { audio: true, selfBrowserSurface: 'include' },
+      publishOptions: screenSharePublishOptions(
+        room.options.publishDefaults?.videoCodec
+      ),
     })
   const { toggle: toggleReactions } = useReactionsToolbar()
   const itemClass = menuRecipe({ icon: true, variant: 'dark' }).item

@@ -42,6 +42,7 @@ and this project adheres to
 
 ### Fixed
 
+- 🐛(frontend) send a VP9/AV1 screen share as one full-resolution stream again
 - 🐛(backend) notify a recording once when the egress webhook and storage polling race
 - 📌(summary) pin kombu to keep celery workers compatible with redis 5
 - 🐛(frontend) show a page when the connection ends unexpectedly

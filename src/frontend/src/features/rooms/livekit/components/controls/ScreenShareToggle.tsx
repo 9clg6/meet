@@ -2,6 +2,7 @@ import { Div, ToggleButton } from '@/primitives'
 import { RiArrowUpLine, RiCloseFill, RiRectangleLine } from '@remixicon/react'
 import { useTranslation } from 'react-i18next'
 import {
+  useRoomContext,
   useTrackToggle,
   type UseTrackToggleProps,
 } from '@livekit/components-react'
@@ -11,6 +12,7 @@ import { type ButtonRecipeProps } from '@/primitives/buttonRecipe'
 import { ToggleButtonProps } from '@/primitives/ToggleButton'
 import { TrackSource } from '@livekit/protocol'
 import { useCanPublishTrack } from '@/features/rooms/livekit/hooks/useCanPublishTrack'
+import { screenSharePublishOptions } from '@/features/rooms/utils/screenSharePublishOptions'
 
 type Props = Omit<
   UseTrackToggleProps<Track.Source.ScreenShare>,
@@ -25,10 +27,14 @@ export const ScreenShareToggle = ({
   ...props
 }: Props) => {
   const { t } = useTranslation('rooms', { keyPrefix: 'controls.screenShare' })
+  const room = useRoomContext()
   const { buttonProps, enabled } = useTrackToggle({
     ...props,
     source: Track.Source.ScreenShare,
     captureOptions: { audio: true, selfBrowserSurface: 'include' },
+    publishOptions: screenSharePublishOptions(
+      room.options.publishDefaults?.videoCodec
+    ),
   })
 
   const tooltipLabel = enabled ? 'stop' : 'start'
