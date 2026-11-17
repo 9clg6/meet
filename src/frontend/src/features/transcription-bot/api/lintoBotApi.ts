@@ -16,6 +16,7 @@ import {
   LintoSummaryService,
 } from '../types/linto'
 import { useLintoCapabilities } from '../hooks/useLintoCapabilities'
+import { sanitizeLintoProfile } from '../utils/lintoProfiles'
 
 // The Meet backend drives LinTO Studio with its own credential; the panel only
 // lists the profiles and asks for a start or a stop.
@@ -47,7 +48,7 @@ export function useLintoBotProfiles(
           `rooms/${roomId}/linto/profiles/`,
           { headers: getLiveKitAuthHeaders(token as string) }
         )
-        const profiles = res.profiles ?? []
+        const profiles = (res.profiles ?? []).map(sanitizeLintoProfile)
         return {
           profiles,
           hasDefault: profiles.length > 0,
