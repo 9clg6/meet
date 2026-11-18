@@ -6,6 +6,7 @@ import { useSubtitles } from '@/features/subtitle/hooks/useSubtitles'
 import { useAreSubtitlesAvailable } from '@/features/subtitle/hooks/useAreSubtitlesAvailable'
 import { CaptionsLanguageMenu } from '@/features/subtitle/component/CaptionsLanguageMenu'
 import { useLintoDisplayLanguages } from '@/features/transcription-bot/hooks/useLintoDisplayLanguages'
+import { useLintoConfig } from '@/features/transcription-bot/hooks/useLintoConfig'
 
 export const SubtitlesToggle = () => {
   const { t } = useTranslation('rooms', { keyPrefix: 'controls.subtitles' })
@@ -20,11 +21,14 @@ export const SubtitlesToggle = () => {
   } = useSubtitles()
   const tooltipLabel = areSubtitlesOpen ? 'open' : 'closed'
   const areSubtitlesAvailable = useAreSubtitlesAvailable()
+  const { enabled: isLintoEnabled } = useLintoConfig()
   const { languages } = useLintoDisplayLanguages()
   // Same condition as CaptionsLanguageMenu rendering (it returns null otherwise).
   const hasLanguageMenu = isLintoActive && languages.length > 0
 
   if (!areSubtitlesAvailable) return null
+  // With LinTO, captions only exist during a live run.
+  if (isLintoEnabled && !isLintoActive) return null
 
   // While LinTO transcribes the room, the CC button shows the captions it
   // publishes — say so (badge + label) instead of the generic wording.
