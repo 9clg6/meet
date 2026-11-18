@@ -26,7 +26,7 @@ describe('resolveRecordingIndicator', () => {
     expect(LINTO_KEEP_AUDIO_INDICATOR_KEY).toBe('any.started')
   })
 
-  it('keeps the egress indicator unchanged', () => {
+  it('says recording during a deferred transcription', () => {
     expect(
       resolveRecordingIndicator({
         ...IDLE,
@@ -35,7 +35,18 @@ describe('resolveRecordingIndicator', () => {
         isStarted: true,
         isRecording: true,
       })
-    ).toEqual({ key: 'transcript.started', source: 'egress' })
+    ).toEqual({ key: 'screen_recording.started', source: 'egress' })
+    expect(
+      resolveRecordingIndicator({
+        ...IDLE,
+        recordingMode: 'transcript',
+        recordingStatus: 'starting',
+        isStarting: true,
+      })
+    ).toEqual({ key: 'screen_recording.starting', source: 'egress' })
+  })
+
+  it('keeps the screen recording indicator unchanged', () => {
     expect(
       resolveRecordingIndicator({
         ...IDLE,
@@ -68,7 +79,7 @@ describe('resolveRecordingIndicator', () => {
         isRecording: true,
         lintoKeepsAudio: true,
       })
-    ).toEqual({ key: 'transcript.started', source: 'egress' })
+    ).toEqual({ key: 'screen_recording.started', source: 'egress' })
   })
 
   it('falls back to the live run once the egress is no longer active', () => {

@@ -72,6 +72,7 @@ and this project adheres to
 - 🐛(backend) a live run without a summary is still delivered (document, Twake Drive, recap email)
 - 🐛(frontend) the LinTO panel sends the room token in the X-LiveKit-Token header, so it works embedded
 - 🐛(frontend) with LinTO, the CC button only shows while a live transcription runs
+- 🐛(frontend) the indicator of a deferred transcription says the meeting is being recorded
 
 ## [1.37.0] - 2026-11-01
 

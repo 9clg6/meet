@@ -42,7 +42,10 @@ export const resolveRecordingIndicator = ({
   if (recordingMode && recordingStatus && (isStarting || isStarted)) {
     // Started in the metadata but LiveKit does not record yet: still starting.
     const status = isStarted && !isRecording ? 'starting' : recordingStatus
-    return { key: `${recordingMode}.${status}`, source: 'egress' }
+    // A deferred transcription records the meeting now and transcribes it later.
+    const mode =
+      recordingMode === 'transcript' ? 'screen_recording' : recordingMode
+    return { key: `${mode}.${status}`, source: 'egress' }
   }
   if (lintoKeepsAudio) {
     return { key: LINTO_KEEP_AUDIO_INDICATOR_KEY, source: 'linto' }
