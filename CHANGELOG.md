@@ -73,6 +73,7 @@ and this project adheres to
 - 🐛(frontend) the LinTO panel sends the room token in the X-LiveKit-Token header, so it works embedded
 - 🐛(frontend) with LinTO, the CC button only shows while a live transcription runs
 - 🐛(frontend) the indicator of a deferred transcription says the meeting is being recorded
+- 💄(frontend) the deferred transcription tool comes before the live one
 
 ## [1.37.0] - 2026-11-01
 

@@ -222,15 +222,6 @@ export const Tools = () => {
       {/* Two distinct transcription tools: the live one (LinTO bot in the
           room: captions, translation, summaries) and the deferred one (the
           meeting is recorded, transcribed once it ends). */}
-      {showLintoTool && (
-        <ToolButton
-          icon={<Icon name="speech_to_text" />}
-          title={tLinto('live.title')}
-          description={tLinto('live.body')}
-          onPress={() => openLinto()}
-          dataAttr="tool-linto-transcription"
-        />
-      )}
       {isTranscriptEnabled && (
         <ToolButton
           icon={<Icon name="speech_to_text" />}
@@ -246,6 +237,15 @@ export const Tools = () => {
           }
           onPress={() => openTranscript()}
           dataAttr="tool-transcript"
+        />
+      )}
+      {showLintoTool && (
+        <ToolButton
+          icon={<Icon name="speech_to_text" />}
+          title={tLinto('live.title')}
+          description={tLinto('live.body')}
+          onPress={() => openLinto()}
+          dataAttr="tool-linto-transcription"
         />
       )}
       {isScreenRecordingEnabled && (
