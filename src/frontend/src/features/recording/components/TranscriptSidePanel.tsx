@@ -385,15 +385,6 @@ export const TranscriptSidePanel = () => {
                     >
                       <Text variant="sm">{tLinto('shareSummary')}</Text>
                     </Checkbox>
-                    <Text
-                      variant="smNote"
-                      className={css({
-                        paddingLeft: '1.625rem',
-                        marginTop: '-0.5rem',
-                      })}
-                    >
-                      {tLinto('shareSummaryHint')}
-                    </Text>
                   </>
                 )}
               </>

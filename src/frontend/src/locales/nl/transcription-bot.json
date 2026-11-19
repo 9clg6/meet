@@ -13,7 +13,6 @@
       "summary": "Verslag aan het einde van de vergadering",
       "summaryService": "Soort verslag",
       "shareSummary": "Delen met de deelnemers",
-      "shareSummaryHint": "Het verslag gaat naar de organisator van de vergadering. Aangevinkt ontvangen aangemelde deelnemers het ook per e-mail.",
       "record": "Ook de video opnemen"
     },
     "translations": {
@@ -54,7 +53,6 @@
     "languageAuto": "Automatische herkenning",
     "summary": "Verslag aan het einde van de vergadering",
     "shareSummary": "Delen met de deelnemers",
-    "shareSummaryHint": "Het verslag gaat naar de organisator van de vergadering. Aangevinkt ontvangen aangemelde deelnemers het ook per e-mail.",
     "record": "Ook de video opnemen",
     "noEntitlement": "Transcriptie na de vergadering is niet ingeschakeld voor je account."
   },

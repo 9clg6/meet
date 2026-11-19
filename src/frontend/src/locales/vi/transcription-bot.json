@@ -13,7 +13,6 @@
       "summary": "Biên bản khi kết thúc cuộc họp",
       "summaryService": "Loại biên bản",
       "shareSummary": "Chia sẻ với người tham gia",
-      "shareSummaryHint": "Biên bản được gửi cho người tổ chức cuộc họp. Khi chọn, người tham gia đã đăng nhập cũng nhận được qua email.",
       "record": "Ghi cả video"
     },
     "translations": {
@@ -54,7 +53,6 @@
     "languageAuto": "Nhận diện tự động",
     "summary": "Biên bản khi kết thúc cuộc họp",
     "shareSummary": "Chia sẻ với người tham gia",
-    "shareSummaryHint": "Biên bản được gửi cho người tổ chức cuộc họp. Khi chọn, người tham gia đã đăng nhập cũng nhận được qua email.",
     "record": "Ghi cả video",
     "noEntitlement": "Chép lời sau cuộc họp chưa được bật cho tài khoản của bạn."
   },

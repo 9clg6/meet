@@ -13,7 +13,6 @@
       "summary": "Protokoll am Ende des Meetings",
       "summaryService": "Art des Protokolls",
       "shareSummary": "Mit den Teilnehmenden teilen",
-      "shareSummaryHint": "Das Protokoll geht an die organisierende Person des Meetings. Ausgewählt erhalten es angemeldete Teilnehmende auch per E-Mail.",
       "record": "Auch das Video aufzeichnen"
     },
     "translations": {
@@ -54,7 +53,6 @@
     "languageAuto": "Automatische Erkennung",
     "summary": "Protokoll am Ende des Meetings",
     "shareSummary": "Mit den Teilnehmenden teilen",
-    "shareSummaryHint": "Das Protokoll geht an die organisierende Person des Meetings. Ausgewählt erhalten es angemeldete Teilnehmende auch per E-Mail.",
     "record": "Auch das Video aufzeichnen",
     "noEntitlement": "Die Transkription nach dem Meeting ist für dein Konto nicht aktiviert."
   },

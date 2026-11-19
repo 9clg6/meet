@@ -13,7 +13,6 @@
       "summary": "Summary at the end of the meeting",
       "summaryService": "Type of summary",
       "shareSummary": "Share with the participants",
-      "shareSummaryHint": "The summary goes to the meeting organizer. Checked, signed-in participants also get it by email.",
       "record": "Also record the video"
     },
     "translations": {
@@ -54,7 +53,6 @@
     "languageAuto": "Automatic detection",
     "summary": "Summary at the end of the meeting",
     "shareSummary": "Share with the participants",
-    "shareSummaryHint": "The summary goes to the meeting organizer. Checked, signed-in participants also get it by email.",
     "record": "Also record the video",
     "noEntitlement": "Transcription after the meeting is not enabled for your account."
   },

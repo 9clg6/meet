@@ -363,15 +363,6 @@ export const LintoSidePanel = () => {
                     >
                       <Text variant="sm">{t('options.shareSummary')}</Text>
                     </Checkbox>
-                    <Text
-                      variant="smNote"
-                      className={css({
-                        paddingLeft: '1.625rem',
-                        marginTop: '-0.5rem',
-                      })}
-                    >
-                      {t('options.shareSummaryHint')}
-                    </Text>
                   </>
                 )}
               </>
