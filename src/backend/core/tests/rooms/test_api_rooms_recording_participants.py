@@ -216,3 +216,53 @@ def test_participant_starter_can_retrieve_but_not_delete(mock_worker_manager):
     client.force_login(room_owner)
     assert client.delete(f"/api/v1.0/recordings/{recording.id}/").status_code == 204
     assert not Recording.objects.filter(id=recording.id).exists()
+
+
+@pytest.mark.parametrize(
+    "options,shared",
+    [
+        ({"share_summary": True}, True),
+        ({"share_summary": True, "summary": False}, False),
+        ({}, False),
+    ],
+)
+def test_a_shared_summary_notes_who_is_in_the_room(
+    options, shared, mock_worker_manager
+):
+    """Sharing the summary notes the signed-in participants present at start."""
+    room = RoomFactory(access_level=RoomAccessLevel.TRUSTED)
+    client = APIClient()
+    client.force_login(UserFactory())
+
+    with mock.patch("core.api.viewsets.present_users", return_value=["u-1"]) as present:
+        response = client.post(
+            f"/api/v1.0/rooms/{room.id}/start-recording/",
+            {"mode": "transcript", "options": options},
+            format="json",
+        )
+
+    assert response.status_code == 201
+    recording = Recording.objects.get()
+    assert recording.linto_state == ({"attendees": ["u-1"]} if shared else {})
+    assert present.called is shared
+
+
+def test_stopping_says_whether_you_receive_the_recording(mock_worker_manager):
+    """The room owner receives the recording, not the participant who started it."""
+    starter = UserFactory()
+    room_owner = UserFactory()
+    room = RoomFactory(access_level=RoomAccessLevel.TRUSTED)
+    room.accesses.create(user=room_owner, role=RoleChoices.OWNER)
+    client = APIClient()
+    client.force_login(starter)
+    client.post(
+        f"/api/v1.0/rooms/{room.id}/start-recording/", {"mode": "screen_recording"}
+    )
+    Recording.objects.update(status=RecordingStatusChoices.ACTIVE)
+
+    response = client.post(f"/api/v1.0/rooms/{room.id}/stop-recording/")
+    assert response.json()["recipient_is_you"] is False
+
+    client.force_login(room_owner)
+    response = client.post(f"/api/v1.0/rooms/{room.id}/stop-recording/")
+    assert response.json()["recipient_is_you"] is True

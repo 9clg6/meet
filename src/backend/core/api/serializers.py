@@ -357,6 +357,8 @@ class RecordingOptions(BaseModel):
             (LinTO). When `None`, falls back to the application default.
         summary_service: The LLM Gateway service route the summary is
             produced with (LinTO). When `None`, the instance default applies.
+        share_summary: Whether the summary is also emailed to the signed-in
+            participants (LinTO). When `None`, it goes to the room owner only.
 
     """
 
@@ -367,6 +369,7 @@ class RecordingOptions(BaseModel):
     encoding: EncodingConfig | None = None
     summary: bool | None = None
     summary_service: str | None = None
+    share_summary: bool | None = None
 
     model_config = {"extra": "forbid"}
 

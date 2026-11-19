@@ -42,18 +42,18 @@ PAYLOAD = {
     "org_id": "org-1",
     "session_id": "sess-1",
     "conversation_name": "linto-room-123",
-    "recipient_user_id": None,
+    "starter_user_id": None,
     "record": False,
     "steps": {},
     "attempts": 0,
 }
 
 
-def _make_room(payload=None, *, recipient=None, owner=None):
+def _make_room(payload=None, *, starter=None, owner=None):
     """Room with a pending ``linto_summary`` payload (and optional users)."""
     payload = {**(PAYLOAD if payload is None else payload)}
-    if recipient is not None:
-        payload["recipient_user_id"] = str(recipient.id)
+    if starter is not None:
+        payload["starter_user_id"] = str(starter.id)
     room = factories.RoomFactory(configuration={"linto_summary": payload})
     if owner is not None:
         factories.UserResourceAccessFactory(
@@ -130,7 +130,7 @@ def _patch_sdk(stack, *, summary=None, services=None):
     return sdk
 
 
-def _patch_service(stack, *, conversation_id="conv-1", owner=None):
+def _patch_service(stack, *, conversation_id="conv-1"):
     """Patch ``BotTranscriptionService``; return the mock service instance."""
     service_cls = stack.enter_context(
         mock.patch("core.services.bot_transcription.BotTranscriptionService")
@@ -138,7 +138,6 @@ def _patch_service(stack, *, conversation_id="conv-1", owner=None):
     service = service_cls.return_value
     service._login.return_value = "fresh-token"
     service.resolve_conversation_id.return_value = conversation_id
-    service._room_owner.return_value = owner
     # No audio kept by default (a run started without keepAudio).
     service.conversation_audio_size.return_value = None
     return service
@@ -274,7 +273,7 @@ class TestConcurrentRuns:
     """A run started while the previous one is being delivered."""
 
     def test_a_run_started_meanwhile_keeps_its_state(self, no_twake, fast_resolve):
-        room = _make_room(recipient=factories.UserFactory(email="s@example.com"))
+        room = _make_room(starter=factories.UserFactory(email="s@example.com"))
         new_run = {"session_id": "sess-2", "bot_id": "bot-2"}
         with contextlib.ExitStack() as stack:
             sdk = _patch_sdk(stack)
@@ -288,7 +287,7 @@ class TestConcurrentRuns:
         assert room.configuration == {"linto": new_run}
 
     def test_a_newer_runs_marker_is_left_alone(self, no_twake, fast_resolve):
-        room = _make_room(recipient=factories.UserFactory(email="s@example.com"))
+        room = _make_room(starter=factories.UserFactory(email="s@example.com"))
         newer = {**PAYLOAD, "session_id": "sess-2", "conversation_name": "linto-2"}
         with contextlib.ExitStack() as stack:
             sdk = _patch_sdk(stack)
@@ -307,7 +306,7 @@ class TestHappyPath:
     def test_delivers_and_clears_marker(self, no_twake, fast_resolve):
         """Happy path: SDK calls in order, steps checkpointed, email sent, marker gone."""
         recipient = factories.UserFactory(email="starter@example.com")
-        room = _make_room(recipient=recipient)
+        room = _make_room(starter=recipient)
 
         with contextlib.ExitStack() as stack:
             sdk = _patch_sdk(stack)
@@ -337,9 +336,6 @@ class TestHappyPath:
             right=31,
             notify=False,
         )
-        # The room owner is never consulted when the starter is known.
-        service._room_owner.assert_not_called()
-
         # Steps were checkpointed as they completed (no summary service → no
         # "summary" step; Twake disabled → no "twake" step).
         assert marked == ["tag", "move", "document", "share", "email"]
@@ -361,7 +357,7 @@ class TestHappyPath:
     def test_summary_export_path(self, no_twake, fast_resolve):
         """With an LLM service the document is the template export + preview."""
         recipient = factories.UserFactory(email="starter@example.com")
-        room = _make_room(recipient=recipient)
+        room = _make_room(starter=recipient)
 
         with contextlib.ExitStack() as stack:
             sdk = _patch_sdk(
@@ -390,9 +386,7 @@ class TestHappyPath:
         self, no_twake, fast_resolve
     ):
         recipient = factories.UserFactory(email="starter@example.com")
-        room = _make_room(
-            {**PAYLOAD, "summary_service": "actions"}, recipient=recipient
-        )
+        room = _make_room({**PAYLOAD, "summary_service": "actions"}, starter=recipient)
         with contextlib.ExitStack() as stack:
             sdk = _patch_sdk(
                 stack,
@@ -408,9 +402,7 @@ class TestHappyPath:
     ):
         settings.LINTO_LLM_SERVICE_ROUTE = None
         recipient = factories.UserFactory(email="starter@example.com")
-        room = _make_room(
-            {**PAYLOAD, "summary_service": "vanished"}, recipient=recipient
-        )
+        room = _make_room({**PAYLOAD, "summary_service": "vanished"}, starter=recipient)
         with contextlib.ExitStack() as stack:
             sdk = _patch_sdk(
                 stack, summary={"content": "## Key points", "jobId": "job-1"}
@@ -419,22 +411,58 @@ class TestHappyPath:
             linto_task._process_bot_live_summary_sync(str(room.id))
         sdk.summarize.assert_awaited_once_with("conv-1", "llm")
 
-    def test_falls_back_to_room_owner(self, no_twake, fast_resolve):
-        """Unknown recipient_user_id → the room owner receives the summary."""
+    def test_the_room_owner_receives_the_delivery_not_the_starter(
+        self, no_twake, fast_resolve
+    ):
+        """With an owner in the room, the starter receives nothing."""
         owner = factories.UserFactory(email="owner@example.com")
-        room = _make_room(
-            {**PAYLOAD, "recipient_user_id": "00000000-0000-0000-0000-0000000000ff"},
-            owner=owner,
-        )
+        starter = factories.UserFactory(email="starter@example.com")
+        room = _make_room(starter=starter, owner=owner)
 
         with contextlib.ExitStack() as stack:
             sdk = _patch_sdk(stack)
-            service = _patch_service(stack, owner=owner)
+            _patch_service(stack)
             linto_task._process_bot_live_summary_sync(str(room.id))
 
-        service._room_owner.assert_called_once()
         sdk.share_conversation.assert_awaited_once()
         assert sdk.share_conversation.call_args.kwargs["email"] == "owner@example.com"
+        assert [m.to for m in mail.outbox] == [["owner@example.com"]]
+
+    def test_a_shared_summary_reaches_the_attendees(self, no_twake, fast_resolve):
+        """The attendees get the summary document, the owner their recap."""
+        owner = factories.UserFactory(email="owner@example.com")
+        starter = factories.UserFactory(email="starter@example.com")
+        guest = factories.UserFactory(email="guest@example.com")
+        attendees = [str(starter.id), str(guest.id), str(owner.id)]
+        room = _make_room(
+            {**PAYLOAD, "share_summary": True, "attendees": attendees},
+            starter=starter,
+            owner=owner,
+        )
+        with contextlib.ExitStack() as stack:
+            _patch_sdk(stack, summary={"content": "## Decisions", "jobId": "job-1"})
+            _patch_service(stack)
+            linto_task._process_bot_live_summary_sync(str(room.id))
+        assert sorted(m.to[0] for m in mail.outbox) == [
+            "guest@example.com",
+            "owner@example.com",
+            "starter@example.com",
+        ]
+        shared = [m for m in mail.outbox if m.to != ["owner@example.com"]]
+        assert all(m.attachments[0][1] == b"%PDF" for m in shared)
+
+    def test_a_transcript_alone_is_not_shared(self, no_twake, fast_resolve):
+        """Without a summary only the owner is emailed."""
+        owner = factories.UserFactory(email="owner@example.com")
+        guest = factories.UserFactory(email="guest@example.com")
+        room = _make_room(
+            {**PAYLOAD, "share_summary": True, "attendees": [str(guest.id)]},
+            owner=owner,
+        )
+        with contextlib.ExitStack() as stack:
+            _patch_sdk(stack)
+            _patch_service(stack)
+            linto_task._process_bot_live_summary_sync(str(room.id))
         assert [m.to for m in mail.outbox] == [["owner@example.com"]]
 
     def test_resume_skips_done_steps(self, no_twake, fast_resolve):
@@ -454,7 +482,7 @@ class TestHappyPath:
                     "email": True,
                 },
             },
-            recipient=recipient,
+            starter=recipient,
         )
 
         with contextlib.ExitStack() as stack:
@@ -484,7 +512,7 @@ class TestNoRecipient:
 
         with contextlib.ExitStack() as stack:
             sdk = _patch_sdk(stack)
-            _patch_service(stack, owner=None)
+            _patch_service(stack)
             get_token = stack.enter_context(
                 mock.patch("core.services.twake_drive.get_drive_token")
             )
@@ -549,9 +577,7 @@ class TestTwakeLiveAudio:
         recipient = factories.UserFactory(
             sub="starter-sub", email="starter@example.com"
         )
-        room = _make_room(
-            {**PAYLOAD, "stopped_at": self.STOPPED_AT}, recipient=recipient
-        )
+        room = _make_room({**PAYLOAD, "stopped_at": self.STOPPED_AT}, starter=recipient)
         with contextlib.ExitStack() as stack:
             _patch_sdk(stack)
             service = _patch_service(stack)
@@ -594,9 +620,12 @@ class TestTwakeLiveAudio:
         assert build_summary_filename(meeting, "docx", lang) not in filenames
         assert build_recording_filename(meeting, "mp4", lang) not in filenames
         assert marked == ["tag", "move", "document", "share", "twake", "email"]
-        # With a drive link the email carries the link instead of the attachment.
+        # The email links the folder and attaches the document that is in it.
         assert len(mail.outbox) == 1
-        assert mail.outbox[0].attachments == []
+        (attachment,) = mail.outbox[0].attachments
+        assert attachment.filename == build_transcript_document_filename(
+            meeting, "docx", lang
+        )
         assert "http://drive.test/dir-1" in mail.outbox[0].body
         room.refresh_from_db()
         assert "linto_summary" not in room.configuration
@@ -696,7 +725,7 @@ class TestTwakeLiveAudio:
                     "twake": "http://drive.test/dir-1",
                 },
             },
-            recipient=recipient,
+            starter=recipient,
         )
         with contextlib.ExitStack() as stack:
             _patch_sdk(stack)
@@ -842,7 +871,7 @@ class TestDeliveryWithoutSummary:
     def test_a_payload_without_the_flag_is_summarized(self, no_twake, fast_resolve):
         """A delivery queued before the flag existed only had the summary on."""
         recipient = factories.UserFactory(email="starter@example.com")
-        room = _make_room(recipient=recipient)
+        room = _make_room(starter=recipient)
         assert "summary" not in room.configuration["linto_summary"]
         with contextlib.ExitStack() as stack:
             sdk = _patch_sdk(stack, summary={"content": "## K", "jobId": "job-1"})

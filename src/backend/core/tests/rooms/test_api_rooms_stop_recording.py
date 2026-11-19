@@ -275,7 +275,11 @@ def test_stop_recording_success(
     mock_stop.assert_called_once_with(recording)
 
     assert response.status_code == 200
-    assert response.json() == {"message": f"Recording stopped for room {room.slug}."}
+    assert response.json() == {
+        "message": f"Recording stopped for room {room.slug}.",
+        "recipient_is_you": True,
+        "share_summary": False,
+    }
 
     # Verify the recording still exists
     assert Recording.objects.count() == 1

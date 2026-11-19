@@ -65,7 +65,7 @@ def drive():
 def upload(owner_access):
     """Run the coroutine under test synchronously."""
     return async_to_sync(twake_recording.upload_recording_files)(
-        owner_access.recording, owner_access, FILES
+        owner_access.recording, owner_access.user, FILES
     )
 
 

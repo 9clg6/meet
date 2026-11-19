@@ -15,12 +15,12 @@ from core.services.twake_drive import (
 logger = logging.getLogger(__name__)
 
 
-async def upload_recording_files(recording, owner_access, files):
+async def upload_recording_files(recording, user, files):
     """Upload multiple files to Twake Drive under a single meeting folder.
 
     Each file in `files` is a dict with keys: "filename", "content", "content_type".
     Returns the Twake Drive link if at least one file was uploaded successfully,
-    else None. Returns None if Twake is not configured or the owner's instance
+    else None. Returns None if Twake is not configured or the user's instance
     is unknown.
     """
     cloudery_url = getattr(settings, "CLOUDERY_URL", None)
@@ -29,7 +29,6 @@ async def upload_recording_files(recording, owner_access, files):
         logger.debug("Twake Drive not configured, skipping upload")
         return None
 
-    user = getattr(owner_access, "user", None)
     if not user:
         logger.warning("No user owns recording %s, skipping Twake Drive", recording.id)
         return None

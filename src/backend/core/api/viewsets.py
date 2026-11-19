@@ -93,6 +93,7 @@ from core.services.participants_management import (
     ParticipantsManagement,
     ParticipantsManagementException,
 )
+from core.services.recipients import present_users, recording_recipient
 from core.services.room_creation import RoomCreation
 from core.services.room_management import RoomManagement, RoomManagementException
 from core.services.room_roles import (
@@ -566,12 +567,19 @@ class RoomViewSet(  # pylint: disable=too-many-public-methods
                 options.encoding.resolution, options.encoding.profile
             )
 
+        share_summary = (
+            wants_transcription
+            and options_data.get("share_summary") is True
+            and options_data.get("summary") is not False
+        )
+        linto_state = {"attendees": present_users(room)} if share_summary else {}
         try:
             with transaction.atomic():
                 recording = models.Recording.objects.create(
                     room=room,
                     mode=mode,
                     options=options_data,
+                    linto_state=linto_state,
                 )
                 recording.grant_initial_accesses(starter=self.request.user)
 
@@ -659,8 +667,15 @@ class RoomViewSet(  # pylint: disable=too-many-public-methods
                 status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        recipient = recording_recipient(recording)
         return drf_response.Response(
-            {"message": f"Recording stopped for room {room.slug}."}
+            {
+                "message": f"Recording stopped for room {room.slug}.",
+                "recipient_is_you": bool(
+                    recipient and recipient.id == getattr(request.user, "id", None)
+                ),
+                "share_summary": bool(recording.options.get("share_summary")),
+            }
         )
 
     @decorators.action(

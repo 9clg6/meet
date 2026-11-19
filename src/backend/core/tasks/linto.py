@@ -46,6 +46,12 @@ from core import models
 from core.entitlements.capabilities import summary_entitled
 from core.recording.enums import FileExtension
 from core.services.audio_extract import extract_audio_from_video
+from core.services.recipients import (
+    attendees_with_email,
+    recording_recipient,
+    recording_starter,
+    room_owner,
+)
 from core.services.twake_drive import (
     build_linto_shortcut_filename,
     build_recording_filename,
@@ -653,6 +659,42 @@ async def _deliver_to_twake(  # noqa: PLR0913 - delivery needs the full context
     return twake_drive_link
 
 
+def _mail_context(user, room_name, meeting_dt, summary_preview, **extra):
+    """The context shared by the delivery emails, in the user's time zone."""
+    local_dt = meeting_dt.astimezone(user.timezone)
+    return {
+        "brandname": settings.EMAIL_BRAND_NAME,
+        "support_email": settings.EMAIL_SUPPORT_EMAIL,
+        "logo_img": settings.EMAIL_LOGO_IMG,
+        "room_name": room_name,
+        "recording_date": local_dt.strftime("%Y-%m-%d"),
+        "recording_time": local_dt.strftime("%H:%M"),
+        "summary_preview": summary_preview,
+        "summary_preview_html": _render_summary_html(
+            _truncate_summary(summary_preview)
+        ),
+        **extra,
+    }
+
+
+@sync_to_async
+def _send_mail(user, template, subject, context, attachment=None):
+    """Render ``template`` in the user's language and send it to them."""
+    with override(user.language or get_language()):
+        msg_html = render_to_string(f"mail/html/{template}.html", context)
+        msg_plain = render_to_string(f"mail/text/{template}.txt", context)
+        email_msg = EmailMultiAlternatives(
+            str(subject).capitalize(),
+            msg_plain,
+            settings.EMAIL_FROM,
+            [user.email],
+        )
+        email_msg.attach_alternative(msg_html, "text/html")
+        if attachment:
+            email_msg.attach(*attachment)
+        email_msg.send(fail_silently=False)
+
+
 async def _send_recap_emails(  # noqa: PLR0913 - recap email needs the full context
     *,
     recipient_users,
@@ -667,7 +709,7 @@ async def _send_recap_emails(  # noqa: PLR0913 - recap email needs the full cont
     log_id,
     checkpoint,
 ):
-    """Send the recap email to each recipient with an email address.
+    """Send the recap email, the document attached, to each recipient.
 
     ``with_summary`` says whether a summary was produced: without one, the
     email announces the transcript alone. The ``email`` step is checkpointed
@@ -678,56 +720,28 @@ async def _send_recap_emails(  # noqa: PLR0913 - recap email needs the full cont
         logger.info("Email already sent for %s, skipping", log_id)
         return
 
+    attachment = (pub_filename, pdf_content, pub_mime) if pdf_content else None
     email_failures = False
     for user in recipient_users:
         if not user.email:
             continue
+        context = _mail_context(
+            user,
+            room_name,
+            meeting_dt,
+            summary_preview,
+            with_summary=with_summary,
+            twake_drive_link=twake_drive_link,
+            has_pdf_attachment=attachment is not None,
+        )
         try:
-
-            @sync_to_async
-            def _send_email(user=user):
-                language = user.language or get_language()
-                with override(language):
-                    ctx = {
-                        "brandname": settings.EMAIL_BRAND_NAME,
-                        "support_email": settings.EMAIL_SUPPORT_EMAIL,
-                        "logo_img": settings.EMAIL_LOGO_IMG,
-                        "room_name": room_name,
-                        "recording_date": meeting_dt.astimezone(user.timezone).strftime(
-                            "%Y-%m-%d"
-                        ),
-                        "recording_time": meeting_dt.astimezone(user.timezone).strftime(
-                            "%H:%M"
-                        ),
-                        "with_summary": with_summary,
-                        "summary_preview": summary_preview,
-                        "summary_preview_html": _render_summary_html(
-                            _truncate_summary(summary_preview)
-                        ),
-                        "twake_drive_link": twake_drive_link,
-                        "has_pdf_attachment": (
-                            pdf_content is not None and not twake_drive_link
-                        ),
-                    }
-                    msg_html = render_to_string("mail/html/transcription.html", ctx)
-                    msg_plain = render_to_string("mail/text/transcription.txt", ctx)
-                    subject = str(_("Your meeting transcription is ready"))
-                    email_msg = EmailMultiAlternatives(
-                        subject.capitalize(),
-                        msg_plain,
-                        settings.EMAIL_FROM,
-                        [user.email],
-                    )
-                    email_msg.attach_alternative(msg_html, "text/html")
-                    if pdf_content and not twake_drive_link:
-                        email_msg.attach(
-                            pub_filename,
-                            pdf_content,
-                            pub_mime,
-                        )
-                    email_msg.send(fail_silently=False)
-
-            await _send_email()
+            await _send_mail(
+                user,
+                "transcription",
+                _("Your meeting transcription is ready"),
+                context,
+                attachment,
+            )
             logger.info("Sent transcription email to %s for %s", user.email, log_id)
         except smtplib.SMTPException:
             email_failures = True
@@ -741,6 +755,61 @@ async def _send_recap_emails(  # noqa: PLR0913 - recap email needs the full cont
         await checkpoint.mark("email")
 
 
+async def _share_summary(  # noqa: PLR0913 - the shared summary needs the full context
+    *,
+    attendee_ids,
+    recipient_user,
+    room_name,
+    meeting_dt,
+    summary_result,
+    summary_preview,
+    pdf_content,
+    pub_filename,
+    pub_mime,
+    log_id,
+    checkpoint,
+):
+    """Email the summary, the document attached, to the signed-in attendees
+    but the recipient. Each one is checkpointed in ``shared`` so a retry skips
+    them."""
+    if not attendee_ids or not _has_summary(summary_result):
+        return
+    attendees = await sync_to_async(attendees_with_email)(
+        attendee_ids, exclude=recipient_user
+    )
+    sent = list(checkpoint.result("shared") or [])
+    attachment = (pub_filename, pdf_content, pub_mime) if pdf_content else None
+    for user in attendees:
+        if str(user.id) in sent:
+            continue
+        context = _mail_context(
+            user,
+            room_name,
+            meeting_dt,
+            summary_preview,
+            has_attachment=attachment is not None,
+        )
+        try:
+            await _send_mail(
+                user,
+                "summary_shared",
+                _("A meeting summary has been shared with you"),
+                context,
+                attachment,
+            )
+        except smtplib.SMTPException:
+            logger.warning(
+                "Failed to share the summary with %s for %s",
+                user.email,
+                log_id,
+                exc_info=True,
+            )
+            continue
+        sent.append(str(user.id))
+        await checkpoint.mark("shared", list(sent))
+        logger.info("Shared the summary with %s for %s", user.email, log_id)
+
+
 # ── recording pipeline ───────────────────────────────────────────────────────
 
 
@@ -750,8 +819,8 @@ def process_linto_transcription(self, recording_id):
 
     Downloads the audio file from S3 storage, uploads it to LinTO Studio
     via the SDK, waits for transcription completion, optionally triggers
-    an LLM summary, generates a PDF via publication templates, then
-    sends an email with the PDF to room participants.
+    an LLM summary, generates the document via publication templates, then
+    emails it to the room owner and to the attendees it is shared with.
 
     The pipeline is idempotent: every expensive/external step is checkpointed
     in ``recording.linto_state`` and skipped on a retry if already done. Only
@@ -796,16 +865,18 @@ async def _resolve_speaker_collection_ids(linto, recording_id):
     return None
 
 
-async def _summary_wanted(options, owner, recording_id):
+async def _summary_wanted(options, starter, recording_id):
     """Does the deferred pipeline ask for an LLM summary? Not when the panel
-    turned it off, nor when the owner of the recording does not hold the
-    ``summary`` capability — read when the summary is produced, so a right
+    turned it off, nor when the user who started the recording does not hold
+    the ``summary`` capability — read when the summary is produced, so a right
     withdrawn during the meeting applies."""
     if options.get("summary") is False:
         logger.info("Summary turned off for %s, skipping", recording_id)
         return False
-    if not await sync_to_async(summary_entitled)(owner):
-        logger.info("No summary capability for the owner of %s, skipping", recording_id)
+    if not await sync_to_async(summary_entitled)(starter):
+        logger.info(
+            "No summary capability for the starter of %s, skipping", recording_id
+        )
         return False
     return True
 
@@ -976,19 +1047,16 @@ async def _process_linto_transcription_sync(recording_id):  # noqa: PLR0915
     # 5.1 / 5.2 Tag + move (soft-fail)
     await _tag_and_move(linto, conversation_id, recording_id, checkpoint)
 
-    # The user who triggered the recording (RecordingAccess role=OWNER is
-    # created for the trigger user in start_room_recording — not necessarily a
-    # room admin): the summary follows their capability, the conversation is
-    # shared with them and the delivery goes to them.
-    owner_access = await sync_to_async(
-        lambda: recording.accesses.filter(role="owner").select_related("user").first()
+    # The summary follows the capability of the user who started the
+    # recording; the delivery goes to the room owner.
+    starter, recipient_user = await sync_to_async(
+        lambda: (recording_starter(recording), recording_recipient(recording))
     )()
-    recipient_user = owner_access.user if owner_access else None
 
     # 5.5 LLM summary (soft-fail) — when wanted; the service is the one
     # picked in the panel (None = the instance default).
     options = recording.options or {}
-    if await _summary_wanted(options, recipient_user, recording_id):
+    if await _summary_wanted(options, starter, recording_id):
         summary_result = await _summarize_conversation(
             linto,
             conversation_id,
@@ -1009,8 +1077,8 @@ async def _process_linto_transcription_sync(recording_id):  # noqa: PLR0915
     pub_mime = _publication_mime(pub_format)
     summary_preview = _extract_summary_preview(summary_result)
 
-    # 5.8 Share conversation with the user who triggered the recording.
-    # Folder and file names on Twake Drive follow the owner's language.
+    # 5.8 Share the conversation with the room owner. Folder and file names on
+    # Twake Drive follow their language.
     owner_language = recipient_user.language if recipient_user else None
     pub_filename = _document_filename(
         recording, pub_format, owner_language, summary_result
@@ -1070,24 +1138,28 @@ async def _process_linto_transcription_sync(recording_id):  # noqa: PLR0915
         checkpoint=checkpoint,
     )
 
-    # 6. Send email to the user(s) who triggered the recording (RecordingAccess
-    # role=OWNER is created for the trigger user in start_room_recording).
-    accesses = await sync_to_async(
-        lambda: list(
-            recording.accesses.filter(role="owner")
-            .select_related("user")
-            .exclude(user__email__isnull=True)
-            .exclude(user__email="")
-        )
-    )()
-
+    # 6. Email the room owner, then the attendees the summary is shared with.
     await _send_recap_emails(
-        recipient_users=[access.user for access in accesses],
+        recipient_users=[recipient_user] if recipient_user else [],
         room_name=room_name,
         meeting_dt=recording.created_at,
         with_summary=_has_summary(summary_result),
         summary_preview=summary_preview,
         twake_drive_link=twake_drive_link,
+        pdf_content=pdf_content,
+        pub_filename=pub_filename,
+        pub_mime=pub_mime,
+        log_id=recording_id,
+        checkpoint=checkpoint,
+    )
+
+    await _share_summary(
+        attendee_ids=state.get("attendees") if options.get("share_summary") else None,
+        recipient_user=recipient_user,
+        room_name=room_name,
+        meeting_dt=recording.created_at,
+        summary_result=summary_result,
+        summary_preview=summary_preview,
         pdf_content=pdf_content,
         pub_filename=pub_filename,
         pub_mime=pub_mime,
@@ -1159,22 +1231,23 @@ def _room_summary_checkpoint(room):
     return _StepCheckpoint(get=_get, mark=_mark)
 
 
-async def _resolve_summary_recipient(payload, room, service):
-    """Recipient of the live summary: the start_bot user, else the room owner.
+async def _resolve_summary_recipient(payload, room):
+    """Recipient of the live delivery: the room owner, else the starter.
 
     Returns ``None`` when neither exists — the caller degrades gracefully.
     """
-    user_id = payload.get("recipient_user_id")
+    owner = await sync_to_async(room_owner)(room)
+    if owner is not None:
+        return owner
+    user_id = payload.get("starter_user_id")
     if user_id:
         try:
             return await sync_to_async(models.User.objects.get)(id=user_id)
         except (models.User.DoesNotExist, ValueError, ValidationError):
             logger.warning(
-                "Recipient user %s not found for room %s, falling back to owner",
-                user_id,
-                room.id,
+                "Starter %s not found for room %s, no recipient", user_id, room.id
             )
-    return await sync_to_async(service._room_owner)(room)  # noqa: SLF001  # pylint: disable=protected-access
+    return None
 
 
 async def _resolve_live_conversation_id(service, payload, room_id):
@@ -1374,7 +1447,7 @@ async def _process_bot_live_summary_sync(room_id):
         media = await linto.get_media(conversation_id)
 
     # 3. Resolve the recipient (graceful when none with email).
-    recipient_user = await _resolve_summary_recipient(payload, room, service)
+    recipient_user = await _resolve_summary_recipient(payload, room)
     if recipient_user is None or not recipient_user.email:
         logger.warning(
             "No recipient with email for room %s live summary — "
@@ -1435,6 +1508,20 @@ async def _process_bot_live_summary_sync(room_id):
         with_summary=_has_summary(summary_result),
         summary_preview=summary_preview,
         twake_drive_link=twake_drive_link,
+        pdf_content=pdf_content,
+        pub_filename=pub_filename,
+        pub_mime=pub_mime,
+        log_id=room_id,
+        checkpoint=checkpoint,
+    )
+
+    await _share_summary(
+        attendee_ids=payload.get("attendees") if payload.get("share_summary") else None,
+        recipient_user=recipient_user,
+        room_name=room_name,
+        meeting_dt=meeting_dt,
+        summary_result=summary_result,
+        summary_preview=summary_preview,
         pdf_content=pdf_content,
         pub_filename=pub_filename,
         pub_mime=pub_mime,

@@ -24,6 +24,7 @@ from django.utils import timezone
 from django.utils.html import escape
 
 from core import models
+from core.services.recipients import recording_recipient
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +52,9 @@ def _step_summary(linto_state):
 
 
 def _resolve_owner(recording):
-    """Best-effort resolution of the recording's OWNER user. Never raises."""
+    """Best-effort resolution of who receives the recording. Never raises."""
     try:
-        owner_access = (
-            recording.accesses.filter(role=models.RoleChoices.OWNER)
-            .select_related("user")
-            .order_by("created_at")
-            .first()
-        )
-        if owner_access and owner_access.user:
-            return owner_access.user
+        return recording_recipient(recording)
     except Exception:  # noqa: BLE001 - diagnostics must not fail
         logger.debug("Could not resolve recording owner")
     return None

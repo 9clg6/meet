@@ -8,10 +8,12 @@ early at a controlled boundary to assert the branching/idempotency without
 running the whole (soft-failing) downstream pipeline.
 """
 
-# pylint: disable=redefined-outer-name,protected-access
+# pylint: disable=redefined-outer-name,protected-access,no-member
 
 import contextlib
 from unittest import mock
+
+from django.core import mail
 
 import aiohttp
 import pytest
@@ -349,7 +351,7 @@ class TestSpeakerIdentification:
 
 
 class TestSummaryCapability:
-    """The deferred pipeline summarizes only for an owner holding the
+    """The deferred pipeline summarizes only for a starter holding the
     `summary` capability, read when the task reaches the summary step."""
 
     TWAKE_PLAN = {"transcription": {"live": True, "async": True}, "recording": True}
@@ -407,9 +409,9 @@ class TestSummaryCapability:
             )
         summarize.assert_not_called()
         assert document.call_args.args[2] == {}
-        # The capability is the recording owner's.
-        owner = rec.accesses.get(role=models.RoleChoices.OWNER).user
-        assert capabilities.call_args.args[0] == owner
+        # The capability is the starter's.
+        starter = rec.accesses.order_by("created_at").first().user
+        assert capabilities.call_args.args[0] == starter
 
     def test_summary_with_the_capability(self, settings):
         settings.LINTO_STUDIO_ENABLED = True
@@ -445,3 +447,79 @@ class TestSummaryCapability:
             summarize, _document, _rec = self._run_until_document(settings)
         capabilities.assert_not_called()
         summarize.assert_awaited_once()
+
+
+class TestDelivery:
+    """The room owner receives the delivery; the attendees get the summary
+    when the starter shares it."""
+
+    SUMMARY = {"success": True, "job_id": "job-1", "content": "## Decisions"}
+
+    def _deliver(self, settings, options):
+        settings.CLOUDERY_URL = None
+        settings.CLOUDERY_TOKEN = None
+        settings.LINTO_ENTITLEMENTS_ENABLED = False
+        owner = factories.UserFactory(email="owner@example.com", language="en-us")
+        admin = factories.UserFactory(email="admin@example.com")
+        starter = factories.UserFactory(email="starter@example.com")
+        guest = factories.UserFactory(email="guest@example.com", language="en-us")
+        room = factories.RoomFactory(
+            users=[(owner, models.RoleChoices.OWNER), (admin, models.RoleChoices.ADMIN)]
+        )
+        rec = factories.RecordingFactory(
+            room=room, mode=models.RecordingModeChoices.TRANSCRIPT, options=options
+        )
+        rec.grant_initial_accesses(starter=starter)
+        rec.linto_state = {
+            "conversation_id": "conv-1",
+            "steps": {"transcription": True},
+            "attempts": 1,
+            "attendees": [str(starter.id), str(guest.id), str(owner.id)],
+        }
+        rec.save(update_fields=["linto_state"])
+        with contextlib.ExitStack() as stack:
+            _patch_storage(stack, b"OggS raw")
+            sdk = _patch_sdk(stack)
+            sdk.get_media = mock.AsyncMock(return_value=mock.Mock(full_text="hi"))
+            sdk.share_conversation = mock.AsyncMock()
+            stack.enter_context(
+                mock.patch.object(linto_task, "_tag_and_move", mock.AsyncMock())
+            )
+            stack.enter_context(
+                mock.patch.object(
+                    linto_task,
+                    "_summarize_conversation",
+                    mock.AsyncMock(return_value=self.SUMMARY),
+                )
+            )
+            stack.enter_context(
+                mock.patch.object(
+                    linto_task,
+                    "_generate_document",
+                    mock.AsyncMock(return_value=(b"DOCX", "docx")),
+                )
+            )
+            linto_task._process_linto_transcription_sync(str(rec.id))
+        return sdk, rec
+
+    def test_the_room_owner_receives_it_not_the_starter(self, settings):
+        """Studio share and email go to the room owner, the document attached."""
+        sdk, _rec = self._deliver(settings, {})
+        assert sdk.share_conversation.call_args.kwargs["email"] == "owner@example.com"
+        assert [m.to for m in mail.outbox] == [["owner@example.com"]]
+        assert mail.outbox[0].attachments[0][1] == b"DOCX"
+
+    def test_a_shared_summary_reaches_the_attendees(self, settings):
+        """The attendees get the summary document, the owner their recap."""
+        _sdk, rec = self._deliver(settings, {"share_summary": True})
+        recipients = sorted(m.to[0] for m in mail.outbox)
+        assert recipients == [
+            "guest@example.com",
+            "owner@example.com",
+            "starter@example.com",
+        ]
+        shared = [m for m in mail.outbox if m.to != ["owner@example.com"]]
+        assert all(m.attachments[0][1] == b"DOCX" for m in shared)
+        assert all("Decisions" in m.body for m in shared)
+        rec.refresh_from_db()
+        assert len(rec.linto_state["steps"]["shared"]) == 2

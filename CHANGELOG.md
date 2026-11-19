@@ -19,6 +19,7 @@ and this project adheres to
 - ✨(backend) GET rooms/{id}/linto/transcription-languages (STT languages via Studio)
 - ✨(backend) summary on/off and service in the recording options (deferred pipeline)
 - ✨(frontend) caption language picked from a chevron menu next to the CC button
+- ✨(backend) option to email the summary to the signed-in participants
 
 ### Changed
 
@@ -38,10 +39,12 @@ and this project adheres to
 - 🔥(backend) LINTO_HIDE_LEGACY_TOOLS is gone: both transcription tools always show
 - 💄(frontend) opening the meeting tools during a run lands on the running tool's panel
 - 💄(frontend) shorter wording of the two transcription tools
+- ✨(backend) the recap email always carries the document, Twake Drive or not
 - 💄(frontend) the summary type is picked on cards (icon, name, description)
 
 ### Fixed
 
+- 🐛(backend) recordings, transcripts and summaries go to the room owner
 - 🐛(frontend) send a VP9/AV1 screen share as one full-resolution stream again
 - 🐛(backend) notify a recording once when the egress webhook and storage polling race
 - 📌(summary) pin kombu to keep celery workers compatible with redis 5

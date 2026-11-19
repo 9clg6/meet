@@ -23,8 +23,8 @@ mv "${DIR_MAILS}"html/*.txt "${DIR_MAILS}"text/;
 
 # Plain-text fallback for summary_preview_html: raw HTML in a .txt mail is
 # unreadable, so substitute the markdown source variable.
-TRANSCRIPTION_TXT="${DIR_MAILS}text/transcription.txt"
-if [ -f "${TRANSCRIPTION_TXT}" ]; then
+for SUMMARY_TXT in "${DIR_MAILS}text/transcription.txt" "${DIR_MAILS}text/summary_shared.txt"; do
+if [ -f "${SUMMARY_TXT}" ]; then
   # node, not python3: the mail-builder image (node:*-alpine) has no python.
   node -e '
 const fs = require("fs");
@@ -36,5 +36,6 @@ fs.writeFileSync(
     () => "{% if summary_preview %}{{ summary_preview|truncatewords:100 }}{% endif %}",
   ),
 );
-' "${TRANSCRIPTION_TXT}"
+' "${SUMMARY_TXT}"
 fi
+done

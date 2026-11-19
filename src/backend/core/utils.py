@@ -20,7 +20,7 @@ from uuid import UUID, uuid4
 
 from django.conf import settings
 from django.core.files.storage import default_storage
-from django.utils.crypto import salted_hmac
+from django.utils.crypto import constant_time_compare, salted_hmac
 
 import aiohttp
 import boto3
@@ -68,6 +68,21 @@ def user_id_proof(room: str, identity: str, user_id: str) -> str:
     return salted_hmac(
         "core.livekit.user_id", f"{room}:{identity}:{user_id}", algorithm="sha256"
     ).hexdigest()
+
+
+def proven_user_id(room: str, identity: str, attributes) -> Optional[str]:
+    """The `user_id` attribute of a participant, when its proof matches."""
+    attributes = attributes or {}
+    user_id = attributes.get("user_id")
+    if (
+        user_id
+        and identity
+        and constant_time_compare(
+            attributes.get("user_id_proof", ""), user_id_proof(room, identity, user_id)
+        )
+    ):
+        return user_id
+    return None
 
 
 def generate_token(  # noqa: PLR0917

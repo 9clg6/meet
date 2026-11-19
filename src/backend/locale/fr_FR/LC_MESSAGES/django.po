@@ -714,6 +714,22 @@ msgstr "Espagnol"
 msgid "Your meeting transcription is ready"
 msgstr "Votre transcription de réunion est prête"
 
+#: core/tasks/linto.py:762
+#: core/templates/mail/html/summary_shared.html:188
+#: core/templates/mail/text/summary_shared.txt:6
+msgid "A meeting summary has been shared with you"
+msgstr "Un compte rendu de réunion a été partagé avec vous"
+
+#: core/templates/mail/html/summary_shared.html:189
+#: core/templates/mail/text/summary_shared.txt:8
+#, python-format
+msgid ""
+" The organizer of \"%(room_name)s\" on %(recording_date)s at "
+"%(recording_time)s shares its summary with the participants. "
+msgstr ""
+" L'organisateur de \"%(room_name)s\" du %(recording_date)s à "
+"%(recording_time)s en partage le compte rendu avec les participants. "
+
 #: core/templates/mail/html/screen_recording.html:216
 #: core/templates/mail/text/screen_recording.txt:18
 msgid " Your recording is saved in Twake Drive. "
@@ -768,8 +784,8 @@ msgstr " Les fichiers de la réunion sont disponibles dans votre Twake Drive. "
 
 #: core/templates/mail/html/transcription.html:224
 #: core/templates/mail/text/transcription.txt:20
-msgid " A PDF summary is attached to this email. "
-msgstr " Un résumé PDF est joint à cet e-mail. "
+msgid " The summary document is attached to this email. "
+msgstr " Le document du compte rendu est joint à cet e-mail. "
 
 #: core/templates/mail/html/transcription.html:215
 #: core/templates/mail/text/transcription.txt:22

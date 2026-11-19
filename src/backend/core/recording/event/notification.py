@@ -18,6 +18,7 @@ from livekit import api as livekit_api
 
 from core import audit, auditing, models, utils
 from core.analytics import UserFeatureFlag, is_user_feature_flag_enabled
+from core.services.recipients import recording_recipient
 from core.tasks.linto import process_linto_transcription
 from core.tasks.mail import send_email
 from core.tasks.recording import process_screen_recording_to_twake
@@ -155,24 +156,19 @@ class NotificationService:
     @staticmethod
     def _notify_user_by_email(recording) -> bool:
         """
-        Queue an email notification to every user with access to the recording
-        when it is ready: its starter and the room's owners/administrators.
+        Queue an email notification to the room owner when the recording is
+        ready (see `recording_recipient`).
 
-        The email includes a direct link that redirects owners to a dedicated download
+        The email includes a direct link that redirects them to a dedicated download
         page in the frontend where they can access their specific recording.
 
-        Rendering and SMTP delivery happen in a Celery worker (``send_email``), so
-        this only does one DB query and enqueues one message per owner.
-        Returns True when every email was queued (or sent, if Celery is disabled).
+        Rendering and SMTP delivery happen in a Celery worker (``send_email``).
+        Returns True when the email was queued (or sent, if Celery is disabled).
         """
 
-        owner_accesses = (
-            models.RecordingAccess.objects.select_related("user")
-            .filter(recording_id=recording.id)
-            .order_by("created_at")
-        )
+        recipient = recording_recipient(recording)
 
-        if not owner_accesses:
+        if recipient is None:
             logger.error("No owner found for recording %s", recording.id)
             return False
 
@@ -182,31 +178,24 @@ class NotificationService:
             "link": f"{get_recording_download_base_url()}/{recording.id}",
         }
 
-        has_failures = False
+        local_created_at = recording.created_at.astimezone(recipient.timezone)
+        try:
+            send_email.delay(
+                template="screen_recording",
+                subject=gettext_noop("Your recording is ready"),
+                recipients=[recipient.email],
+                language=recipient.language or get_language(),
+                context={
+                    **context,
+                    "recording_date": local_created_at.strftime("%Y-%m-%d"),
+                    "recording_time": local_created_at.strftime("%H:%M"),
+                },
+            )
+        except (smtplib.SMTPException, CeleryOperationalError) as exception:
+            logger.error("notification could not be sent: %s", exception)
+            return False
 
-        # We process emails individually rather than in batch because:
-        # 1. Each email requires personalization (timezone, language)
-        # 2. The number of recipients per recording is typically small (not thousands)
-        for access in owner_accesses:
-            user = access.user
-            local_created_at = recording.created_at.astimezone(user.timezone)
-            try:
-                send_email.delay(
-                    template="screen_recording",
-                    subject=gettext_noop("Your recording is ready"),
-                    recipients=[user.email],
-                    language=user.language or get_language(),
-                    context={
-                        **context,
-                        "recording_date": local_created_at.strftime("%Y-%m-%d"),
-                        "recording_time": local_created_at.strftime("%H:%M"),
-                    },
-                )
-            except (smtplib.SMTPException, CeleryOperationalError) as exception:
-                logger.error("notification could not be sent: %s", exception)
-                has_failures = True
-
-        return not has_failures
+        return True
 
     @staticmethod
     async def _get_recording_timestamps(worker_id):

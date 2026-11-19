@@ -51,10 +51,11 @@
           >
             {% trans "Open in Twake Drive" %}
           </mj-button>
-          <mj-raw>{% elif has_pdf_attachment and with_summary %}</mj-raw>
+          <mj-raw>{% endif %}</mj-raw>
+          <mj-raw>{% if has_pdf_attachment and with_summary %}</mj-raw>
           <mj-text>
             {% blocktrans %}
-            A PDF summary is attached to this email.
+            The summary document is attached to this email.
             {% endblocktrans %}
           </mj-text>
           <mj-raw>{% elif has_pdf_attachment %}</mj-raw>

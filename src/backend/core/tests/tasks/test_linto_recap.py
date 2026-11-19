@@ -3,6 +3,7 @@
 # pylint: disable=protected-access,no-member
 
 import contextlib
+import smtplib
 from datetime import datetime, timezone
 from unittest import mock
 
@@ -134,8 +135,16 @@ class TestRecapEmail:
         message = self._send(twake_drive_link=None, pdf_content=b"%PDF")
         for text in (message.body, message.alternatives[0][0]):
             assert "The transcription and summary of" in text
-            assert "A PDF summary is attached" in text
+            assert "The summary document is attached" in text
             assert "The transcription document is attached" not in text
+
+    def test_the_document_is_attached_next_to_the_drive_link(self):
+        """The document in the Drive folder also comes attached."""
+        message = self._send(pdf_content=b"DOCX", pub_filename="summary.docx")
+        assert message.attachments[0][:2] == ("summary.docx", b"DOCX")
+        for text in (message.body, message.alternatives[0][0]):
+            assert "owner-drive.example.com" in text
+            assert "The summary document is attached" in text
 
     def test_without_a_summary_the_email_announces_the_transcript_alone(self):
         """No summary (not entitled, or turned off): the email stands on the
@@ -162,6 +171,90 @@ class TestRecapEmail:
         assert "The transcription of" in message.body
         assert "owner-drive.example.com" in message.body
         assert "summary" not in message.body.lower()
+
+
+class TestSharedSummary:
+    """The summary goes to the signed-in attendees, the recipient aside."""
+
+    SUMMARY = {"success": True, "job_id": "job-1"}
+
+    def _share(self, attendee_ids, **kwargs):
+        params = {
+            "attendee_ids": attendee_ids,
+            "recipient_user": None,
+            "room_name": "okr-mcwr-mqk",
+            "meeting_dt": datetime(2026, 9, 24, 14, 32, tzinfo=timezone.utc),
+            "summary_result": self.SUMMARY,
+            "summary_preview": REPORT,
+            "pdf_content": b"DOCX",
+            "pub_filename": "summary.docx",
+            "pub_mime": "application/vnd.openxmlformats-officedocument"
+            ".wordprocessingml.document",
+            "log_id": "rec-1",
+            "checkpoint": _MemoryCheckpoint(),
+        }
+        params.update(kwargs)
+        async_to_sync(linto_task._share_summary)(**params)
+        return params["checkpoint"]
+
+    def test_each_attendee_gets_the_document(self):
+        """Every attendee gets the document and the preview, no Drive link."""
+        alice = factories.UserFactory(email="alice@example.com", language="en-us")
+        bob = factories.UserFactory(email="bob@example.com", language="en-us")
+        checkpoint = self._share([str(alice.id), str(bob.id)])
+        assert sorted(m.to[0] for m in mail.outbox) == [
+            "alice@example.com",
+            "bob@example.com",
+        ]
+        message = mail.outbox[0]
+        assert message.subject == "A meeting summary has been shared with you"
+        assert message.attachments[0][:2] == ("summary.docx", b"DOCX")
+        for text in (message.body, message.alternatives[0][0]):
+            assert "shares its summary with the participants" in text
+            assert "The summary document is attached" in text
+            assert "Analytical Report" in text
+            assert "Twake" not in text
+        assert sorted(checkpoint.steps["shared"]) == sorted(
+            [str(alice.id), str(bob.id)]
+        )
+
+    def test_the_recipient_and_users_without_email_are_left_out(self):
+        """Neither the recipient nor a user without email or inactive gets it."""
+        owner = factories.UserFactory(email="owner@example.com")
+        no_email = factories.UserFactory(email=None)
+        inactive = factories.UserFactory(email="gone@example.com", is_active=False)
+        guest = factories.UserFactory(email="guest@example.com")
+        self._share(
+            [str(owner.id), str(no_email.id), str(inactive.id), str(guest.id)],
+            recipient_user=owner,
+        )
+        assert [m.to for m in mail.outbox] == [["guest@example.com"]]
+
+    def test_no_summary_nothing_is_shared(self):
+        """A transcript alone is never shared."""
+        guest = factories.UserFactory(email="guest@example.com")
+        self._share([str(guest.id)], summary_result={})
+        assert mail.outbox == []
+
+    def test_a_resumed_share_skips_who_already_got_it(self):
+        """A retry only emails the attendees not reached yet."""
+        alice = factories.UserFactory(email="alice@example.com")
+        bob = factories.UserFactory(email="bob@example.com")
+        checkpoint = _MemoryCheckpoint({"shared": [str(alice.id)]})
+        self._share([str(alice.id), str(bob.id)], checkpoint=checkpoint)
+        assert [m.to for m in mail.outbox] == [["bob@example.com"]]
+        assert checkpoint.steps["shared"] == [str(alice.id), str(bob.id)]
+
+    def test_a_failed_send_is_retried_next_time(self):
+        """An SMTP failure leaves the attendee unchecked."""
+        alice = factories.UserFactory(email="alice@example.com")
+        with mock.patch.object(
+            linto_task.EmailMultiAlternatives,
+            "send",
+            side_effect=smtplib.SMTPException("down"),
+        ):
+            checkpoint = self._share([str(alice.id)])
+        assert "shared" not in checkpoint.steps
 
 
 class TestDocumentName:

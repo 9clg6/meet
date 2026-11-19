@@ -4,12 +4,11 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.utils.crypto import constant_time_compare
 
 from livekit.api import TokenVerifier
 from rest_framework import authentication, exceptions
 
-from core.utils import user_id_proof
+from core.utils import proven_user_id
 
 UserModel = get_user_model()
 
@@ -61,13 +60,9 @@ class LiveKitTokenAuthentication(authentication.BaseAuthentication):
         """The user of the token: by its `user_id` attribute, which counts only
         with the proof Meet set beside it. The identity alone names nobody: an
         anonymous participant's comes from the client."""
-        attributes = getattr(claims, "attributes", None) or {}
-        pk = attributes.get("user_id")
         room = claims.video.room if claims.video else ""
-        if pk and constant_time_compare(
-            attributes.get("user_id_proof", ""),
-            user_id_proof(room, claims.identity, pk),
-        ):
+        pk = proven_user_id(room, claims.identity, getattr(claims, "attributes", None))
+        if pk:
             try:
                 return UserModel.objects.get(pk=pk, is_active=True)
             except (UserModel.DoesNotExist, ValueError, DjangoValidationError):

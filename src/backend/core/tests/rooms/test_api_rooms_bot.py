@@ -474,7 +474,12 @@ def test_no_answer_to_the_browser_carries_a_studio_credential(linto_settings, so
     assert [answer.status_code for answer in answers] == [200] * 5
     assert answers[1].json()["profiles"][0]["id"] == "220"
     assert answers[2].json()["session_id"] == "sess-1"
-    assert answers[4].json() == {"status": "stopped"}
+    assert answers[4].json() == {
+        "status": "stopped",
+        "summary": True,
+        "share_summary": False,
+        "recipient_is_you": True,
+    }
     studio_calls = [c for c in responses.calls if "/organizations/" in c.request.url]
     expected = USER_KEY_TOKEN if source == "user_key" else STUDIO_KEY
     assert {c.request.headers["Authorization"] for c in studio_calls} == {

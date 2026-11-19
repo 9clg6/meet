@@ -13,6 +13,7 @@ from django.utils.translation import gettext_lazy as _
 from asgiref.sync import async_to_sync, sync_to_async
 
 from core import models
+from core.services.recipients import recording_recipient
 from core.services.twake_drive import build_recording_filename
 from core.services.twake_recording import upload_recording_files
 from core.tasks._base import NotificationTask
@@ -35,10 +36,10 @@ logger = logging.getLogger(__name__)
 def process_screen_recording_to_twake(self, recording_id):
     """Upload a screen recording (MP4) to Twake Drive and notify owners.
 
-    Downloads the MP4 from S3 storage, uploads it to Twake Drive under
-    `Meetings/Meeting - {date} {time} - {room id}/{date} - Recording.mp4`, then sends an
-    email to every owner with the direct download link plus the Twake
-    Drive link when available.
+    Downloads the MP4 from S3 storage, uploads it to the room owner's Twake
+    Drive under `Meetings/Meeting - {date} {time} - {room id}/{date} - Recording.mp4`,
+    then emails them the direct download link plus the Twake Drive link when
+    available.
 
     Transient failures (network/timeout/HTTP 5xx) on the S3 download or the
     Twake upload are retried by Celery with exponential back-off; permanent
@@ -82,19 +83,8 @@ async def _process_screen_recording_sync(recording_id):
         recording_id,
     )
 
-    owner_access = await sync_to_async(
-        lambda: (
-            models.RecordingAccess.objects.filter(
-                role=models.RoleChoices.OWNER,
-                recording_id=recording.id,
-            )
-            .select_related("user")
-            .order_by("created_at")
-            .first()
-        )
-    )()
-
-    if not owner_access:
+    recipient = await sync_to_async(recording_recipient)(recording)
+    if recipient is None:
         logger.error("No owner found for recording %s", recording_id)
         return
 
@@ -105,11 +95,11 @@ async def _process_screen_recording_sync(recording_id):
         with classify_external("upload screen recording to Twake Drive"):
             twake_drive_link = await upload_recording_files(
                 recording,
-                owner_access,
+                recipient,
                 [
                     {
                         "filename": build_recording_filename(
-                            recording, "mp4", owner_access.user.language
+                            recording, "mp4", recipient.language
                         ),
                         "content": file_content,
                         "content_type": "video/mp4",
@@ -127,21 +117,8 @@ async def _process_screen_recording_sync(recording_id):
         logger.info("Email already sent for %s, skipping", recording_id)
         return
 
-    accesses = await sync_to_async(
-        lambda: list(
-            models.RecordingAccess.objects.filter(
-                role=models.RoleChoices.OWNER,
-                recording_id=recording.id,
-            )
-            .select_related("user")
-            .exclude(user__email__isnull=True)
-            .exclude(user__email="")
-        )
-    )()
-
     email_failures = False
-    for access in accesses:
-        user = access.user
+    for user in [recipient] if recipient.email else []:
         try:
 
             @sync_to_async

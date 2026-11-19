@@ -165,6 +165,36 @@ class TestMarkStarted:
         room.refresh_from_db()
         assert room.configuration["linto"]["keep_audio"] is False
 
+    def test_a_shared_summary_lists_the_signed_in_participants(self, studio_settings):
+        """The participants present at start are the first attendees."""
+        studio_settings.LINTO_ENTITLEMENTS_ENABLED = False
+        room, owner = _owner_room()
+        data = {"session_id": "s", "channel_id": "c", "share_summary": True}
+        with mock.patch(
+            "core.services.bot_transcription.present_users", return_value=["u-1"]
+        ) as present:
+            result = BotTranscriptionService().mark_started(room, data, user=owner)
+        present.assert_called_once_with(room)
+        assert result["share_summary"] is True
+        room.refresh_from_db()
+        assert room.configuration["linto"]["attendees"] == ["u-1"]
+
+    def test_no_summary_nothing_to_share(self, studio_settings):
+        """Sharing needs the summary."""
+        studio_settings.LINTO_ENTITLEMENTS_ENABLED = False
+        room, owner = _owner_room()
+        data = {
+            "session_id": "s",
+            "channel_id": "c",
+            "summary": False,
+            "share_summary": True,
+        }
+        with mock.patch("core.services.bot_transcription.present_users") as present:
+            result = BotTranscriptionService().mark_started(room, data, user=owner)
+        present.assert_not_called()
+        assert result["share_summary"] is False
+        assert "attendees" not in result
+
     def test_persists_the_late_joiner_summary_choice(self, studio_settings):
         room, owner = _owner_room()
         data = {"session_id": "s", "channel_id": "c", "catchup": False}
@@ -1516,7 +1546,10 @@ class TestStop:
             f"{STUDIO}/api/organizations/{ORG}/sessions/sess-1", json={}
         )
         assert BotTranscriptionService().stop(room, user=starter) == {
-            "status": "stopped"
+            "status": "stopped",
+            "summary": True,
+            "share_summary": False,
+            "recipient_is_you": True,
         }
         assert del_bot.call_count == 1
         assert del_session.call_count == 1
@@ -1530,6 +1563,30 @@ class TestStop:
         assert not any("/quickMeeting/" in c.request.url for c in responses.calls)
         self.banner.assert_called_once_with(room, False)
         self.enqueue.assert_called_once_with(room)
+
+    @responses.activate
+    def test_the_room_owner_receives_the_delivery(self, run_settings):
+        """The payload names the starter and the stop tells who receives it."""
+        room, owner = _owner_room()
+        starter = UserFactory()
+        self._running(room, str(starter.id))
+        room.configuration["linto"].update(
+            share_summary=True, attendees=[str(starter.id)]
+        )
+        room.save()
+        responses.delete(f"{BOTS_URL}/bot-1", json={})
+        responses.delete(f"{STUDIO}/api/organizations/{ORG}/sessions/sess-1", json={})
+        result = BotTranscriptionService().stop(room, user=starter)
+        assert result["recipient_is_you"] is False
+        assert result["share_summary"] is True
+        room.refresh_from_db()
+        payload = room.configuration["linto_summary"]
+        assert payload["starter_user_id"] == str(starter.id)
+        assert payload["share_summary"] is True
+        assert payload["attendees"] == [str(starter.id)]
+        assert BotTranscriptionService._is_recipient(
+            room, {"user_id": str(starter.id)}, owner
+        )
 
     @responses.activate
     def test_an_admin_stops_someone_elses_run(self, run_settings):
@@ -1783,3 +1840,22 @@ class TestCatchUpRelay:
         assert next(relay) == b"one"
         relay.close()
         assert upstream.closed
+
+
+class TestStartRecording:
+    """The video of a live run gets the accesses of the recording tool."""
+
+    def test_the_room_owners_own_it_the_starter_is_member(self):
+        """Same accesses as a recording started from the recording tool."""
+        room, owner = _owner_room()
+        starter = UserFactory()
+        with (
+            mock.patch("core.services.bot_transcription.get_worker_service"),
+            mock.patch("core.services.bot_transcription.WorkerServiceMediator"),
+        ):
+            recording_id = BotTranscriptionService()._start_recording(room, starter)
+        recording = models.Recording.objects.get(id=recording_id)
+        assert dict(recording.accesses.values_list("user_id", "role")) == {
+            owner.id: models.RoleChoices.OWNER,
+            starter.id: models.RoleChoices.MEMBER,
+        }

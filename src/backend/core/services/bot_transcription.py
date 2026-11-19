@@ -26,6 +26,7 @@ from core.api.permissions import get_recording_permission_level
 from core.entitlements.capabilities import recording_entitled, summary_entitled
 from core.recording.worker.factories import get_worker_service
 from core.recording.worker.mediator import WorkerServiceMediator
+from core.services.recipients import present_users, room_owner
 from core.services.room_management import RoomManagement
 from core.services.subtitle import SubtitleService
 from core.utils import generate_bot_join_token
@@ -419,10 +420,9 @@ class BotTranscriptionService:
     def _start_recording(self, room, user):
         """Start a LiveKit video egress for the room; never block transcription.
 
-        Returns the recording id on success, else None. The owner is the
-        authenticated caller, or the room owner when the caller is anonymous
-        (LiveKitTokenAuthentication ⇒ AnonymousUser); if neither exists we still
-        record but skip the RecordingAccess.
+        Returns the recording id on success, else None. The accesses are the
+        ones of a recording started from the recording tool, the starter being
+        the authenticated caller, else the room owner.
         """
         try:
             recording = models.Recording.objects.create(
@@ -430,13 +430,11 @@ class BotTranscriptionService:
                 mode=models.RecordingModeChoices.SCREEN_RECORDING,
                 options={},
             )
-            owner = user if (user is not None and user.is_authenticated) else None
-            if owner is None:
-                owner = self._room_owner(room)
-            if owner is not None:
-                models.RecordingAccess.objects.create(
-                    user=owner, role=models.RoleChoices.OWNER, recording=recording
-                )
+            starter = user if (user is not None and user.is_authenticated) else None
+            if starter is None:
+                starter = room_owner(room)
+            if starter is not None:
+                recording.grant_initial_accesses(starter=starter)
             else:
                 logger.warning(
                     "LinTO bot: no owner for egress recording of room %s "
@@ -557,15 +555,6 @@ class BotTranscriptionService:
                 room.id,
                 exc,
             )
-
-    def _room_owner(self, room):
-        """The room's OWNER user, if any (for anonymous-triggered egress ownership)."""
-        access = (
-            room.accesses.filter(role=models.RoleChoices.OWNER)
-            .select_related("user")
-            .first()
-        )
-        return access.user if access else None
 
     # ── live run ─────────────────────────────────────────────────────────
 
@@ -789,7 +778,13 @@ class BotTranscriptionService:
                 },
             )
             bot_id = bot.get("id") or bot.get("_id")
-            choices = ("summary", "summary_service", "record", "catchup")
+            choices = (
+                "summary",
+                "summary_service",
+                "share_summary",
+                "record",
+                "catchup",
+            )
             run = self.mark_started(
                 room,
                 {
@@ -957,9 +952,20 @@ class BotTranscriptionService:
                     linto.get("bot_id"),
                     name=conversation_name,
                 )
-            return self._close_run(room, linto, conversation_name)
+            result = self._close_run(room, linto, conversation_name)
+            result["recipient_is_you"] = self._is_recipient(room, linto, user)
+            return result
         finally:
             cache.delete(lock)
+
+    @staticmethod
+    def _is_recipient(room, linto, user):
+        """Whether ``user`` receives the run's delivery: the room owner, else the starter."""
+        if user is None or not getattr(user, "is_authenticated", False):
+            return False
+        owner = room_owner(room)
+        recipient_id = owner.id if owner else linto.get("user_id")
+        return str(user.id) == str(recipient_id)
 
     @staticmethod
     def _check_may_stop(room, linto, user):
@@ -982,6 +988,7 @@ class BotTranscriptionService:
             self._stop_recording(recording_id)
 
         summary = bool(linto.get("summary", True))
+        share_summary = summary and bool(linto.get("share_summary"))
         org_id = linto.get("org_id")
         session_id = linto.get("session_id")
         # The delivery (document, Twake Drive, recap email) follows every run
@@ -992,9 +999,13 @@ class BotTranscriptionService:
                 "org_id": org_id,
                 "session_id": session_id,
                 "conversation_name": conversation_name,
-                "recipient_user_id": linto.get("user_id"),
+                "starter_user_id": linto.get("user_id"),
                 "summary": summary,
                 "summary_service": linto.get("summary_service"),
+                "share_summary": share_summary,
+                "attendees": list(linto.get("attendees") or [])
+                if share_summary
+                else [],
                 "record": bool(linto.get("record", False)),
                 "steps": {},
                 "attempts": 0,
@@ -1008,7 +1019,7 @@ class BotTranscriptionService:
         if summary_payload is not None:
             self._enqueue_summary(room)
         logger.info("LinTO run stopped for room %s (summary=%s)", room.id, summary)
-        return {"status": "stopped"}
+        return {"status": "stopped", "summary": summary, "share_summary": share_summary}
 
     def mark_started(self, room, data, user=None):
         """Record a started run and light the room-wide state.
@@ -1016,9 +1027,10 @@ class BotTranscriptionService:
         ``data`` carries the Studio ids :meth:`start` obtained (``session_id``,
         ``channel_id``, ``org_id``, ``bot_id``) plus the add-ons
         (``summary`` default True, ``summary_service`` the chosen summary
-        service route, ``record`` default False, ``catchup`` default True = a
-        late joiner gets the "before you arrived" summary, ``keep_audio`` the
-        channel's ``keepAudio``). Re-checks the
+        service route, ``share_summary`` default False = the summary also goes
+        to the signed-in participants, ``record`` default False, ``catchup``
+        default True = a late joiner gets the "before you arrived" summary,
+        ``keep_audio`` the channel's ``keepAudio``). Re-checks the
         transcript permission (defence in depth), drops both summaries without
         the ``summary`` capability, starts the optional video egress when allowed,
         persists ``room.configuration["linto"]`` and sets the banner. Returns the
@@ -1049,6 +1061,7 @@ class BotTranscriptionService:
                 room.id,
             )
             summary = catchup = False
+        share_summary = summary and data.get("share_summary") is True
         if record and not self._has_recording_permission(
             room, user, models.RecordingModeChoices.SCREEN_RECORDING
         ):
@@ -1075,6 +1088,7 @@ class BotTranscriptionService:
             # The summary service (LLM Gateway route) the user picked in the
             # panel; None = the instance default (LINTO_LLM_SERVICE_ROUTE).
             "summary_service": summary_service,
+            "share_summary": share_summary,
             "record": record,
             # Late-joiner summary: advertised in the room metadata so the
             # joiner's browser knows whether to ask for it.
@@ -1090,6 +1104,8 @@ class BotTranscriptionService:
                 str(user.id) if (user is not None and user.is_authenticated) else None
             ),
         }
+        if share_summary:
+            linto["attendees"] = present_users(room)
         if record:
             recording_id = self._start_recording(room, user)
             if recording_id:

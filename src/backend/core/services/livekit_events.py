@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from livekit import api
 
-from core import audit, auditing, models
+from core import audit, auditing, models, utils
 from core.recording.enums import UNSUCCESSFUL_EVENTS, RecordingWorkerEvent
 from core.recording.event.authentication import MachineUser
 from core.recording.services.metadata_collector import (
@@ -23,6 +23,7 @@ from core.recording.services.recording_events import RecordingEventsService
 
 from .lobby import LobbyService
 from .presence import PresenceCache
+from .recipients import note_attendee
 from .room_management import (
     RoomManagement,
     RoomManagementException,
@@ -151,6 +152,7 @@ class LiveKitEventsService:
             "egress_ended": self._handle_egress_ended,
             "room_started": self._handle_room_started,
             "room_finished": self._handle_room_finished,
+            "participant_joined": self._handle_participant_joined,
             "participant_left": self._handle_participant_left,
         }
 
@@ -422,6 +424,16 @@ class LiveKitEventsService:
                 room_id,
                 exc_info=True,
             )
+
+    @staticmethod
+    def _handle_participant_joined(data):
+        """Handle 'participant_joined': note a signed-in attendee of a shared summary."""
+        participant = data.participant
+        user_id = utils.proven_user_id(
+            data.room.name, participant.identity, dict(participant.attributes)
+        )
+        if user_id:
+            note_attendee(data.room.name, user_id)
 
     def _handle_participant_left(self, data):
         """Handle 'participant_left': invalidate the presence cache.
