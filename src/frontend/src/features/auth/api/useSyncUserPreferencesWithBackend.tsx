@@ -10,6 +10,8 @@ import {
   type BackendLanguage,
 } from '@/utils/languages'
 import { useUser } from './useUser'
+import { type ApiUser } from './ApiUser'
+import { mergeUpdatedUser } from '../utils/mergeUpdatedUser'
 import { ApiError } from '@/api/ApiError.ts'
 import { reportError } from '@/features/analytics/telemetry'
 
@@ -27,7 +29,9 @@ export const useSyncUserPreferencesWithBackend = () => {
   const { mutateAsync } = useMutation({
     mutationFn: updateUserPreferences,
     onSuccess: (updatedUser) => {
-      queryClient.setQueryData([keys.user], updatedUser)
+      queryClient.setQueryData<ApiUser | false>([keys.user], (previous) =>
+        mergeUpdatedUser(previous, updatedUser)
+      )
       lastServerLanguage.current = updatedUser.language
     },
   })

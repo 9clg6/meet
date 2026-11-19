@@ -74,6 +74,7 @@ and this project adheres to
 - 🐛(frontend) with LinTO, the CC button only shows while a live transcription runs
 - 🐛(frontend) the indicator of a deferred transcription says the meeting is being recorded
 - 💄(frontend) the deferred transcription tool comes before the live one
+- 🐛(frontend) a timezone sync on load no longer hides the LinTO tools
 
 ## [1.37.0] - 2026-11-01
 
