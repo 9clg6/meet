@@ -63,38 +63,54 @@ export const decodeNotificationDataReceived = (
   }
 }
 
+/** Who the recording goes to, as the stop answered it. */
+export type RecordingDelivery = {
+  recipientIsMe: boolean
+  shared?: boolean
+}
+
 export const notifyRecordingSaveInProgress = (
   mode: RecordingMode,
-  participant: Participant
+  participant: Participant,
+  delivery?: RecordingDelivery
 ) => {
   toastQueue.add(
     {
       participant,
       mode,
       type: NotificationType.RecordingSaving,
+      recipientIsMe: delivery?.recipientIsMe === true,
+      shared: delivery?.shared === true,
     },
     { timeout: NotificationDuration.RECORDING_SAVING }
   )
 }
 
 /**
- * LinTO "the recap is on its way" toast (fork). Carries everything the
- * renderer needs: `startedByMe` decides whether the email recipient is "me"
- * (my own address, bold) or the generic organizer wording, `summary` whether
- * the recap holds a summary or the transcript alone. Triggered from the LinTO
- * panel's stop handler: every run is delivered.
+ * LinTO "the recap is on its way" toast (fork), triggered from the LinTO
+ * panel's stop handler: `recipientIsMe` addresses it to my own email,
+ * otherwise to the meeting organizer; `summary` says whether the recap holds
+ * a summary or the transcript alone, `shared` whether the participants get
+ * the summary too.
  */
-export const notifyLintoSummarySaving = (
-  startedByMe: boolean,
-  email?: string,
-  summary = true
-) => {
+export const notifyLintoSummarySaving = ({
+  recipientIsMe,
+  email,
+  summary = true,
+  shared = false,
+}: {
+  recipientIsMe: boolean
+  email?: string
+  summary?: boolean
+  shared?: boolean
+}) => {
   toastQueue.add(
     {
       type: NotificationType.LintoSummarySaving,
-      startedByMe,
+      recipientIsMe,
       email,
       summary,
+      shared,
     },
     { timeout: NotificationDuration.RECORDING_SAVING }
   )

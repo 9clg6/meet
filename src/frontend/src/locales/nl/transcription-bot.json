@@ -12,6 +12,8 @@
       "catchupHint": "Wie binnenkomt, ziet een samenvatting van wat hij heeft gemist.",
       "summary": "Verslag aan het einde van de vergadering",
       "summaryService": "Soort verslag",
+      "shareSummary": "Delen met de deelnemers",
+      "shareSummaryHint": "Het verslag gaat naar de organisator van de vergadering. Aangevinkt ontvangen aangemelde deelnemers het ook per e-mail.",
       "record": "Ook de video opnemen"
     },
     "translations": {
@@ -51,6 +53,8 @@
     "language": "Gesproken taal",
     "languageAuto": "Automatische herkenning",
     "summary": "Verslag aan het einde van de vergadering",
+    "shareSummary": "Delen met de deelnemers",
+    "shareSummaryHint": "Het verslag gaat naar de organisator van de vergadering. Aangevinkt ontvangen aangemelde deelnemers het ook per e-mail.",
     "record": "Ook de video opnemen",
     "noEntitlement": "Transcriptie na de vergadering is niet ingeschakeld voor je account."
   },
@@ -61,7 +65,8 @@
     "ownEmail": "Het verslag wordt naar je verzonden op <recipient>{{email}}</recipient>",
     "generic": "Het verslag wordt naar de organisator van de vergadering verzonden.",
     "ownEmailTranscript": "Het transcript wordt naar je verzonden op <recipient>{{email}}</recipient>",
-    "genericTranscript": "Het transcript wordt naar de organisator van de vergadering verzonden."
+    "genericTranscript": "Het transcript wordt naar de organisator van de vergadering verzonden.",
+    "sharedSuffix": "Het wordt ook gedeeld met de aangemelde deelnemers."
   },
   "catchupToast": {
     "body": "De samenvatting van wat er is gezegd voordat je erbij kwam, is klaar.",

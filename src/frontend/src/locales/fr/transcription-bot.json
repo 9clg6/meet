@@ -12,6 +12,8 @@
       "catchupHint": "À son arrivée, un participant voit un résumé de ce qu'il a manqué.",
       "summary": "Compte rendu à la fin de la réunion",
       "summaryService": "Type de compte rendu",
+      "shareSummary": "Partager avec les participants",
+      "shareSummaryHint": "Le compte rendu va à l'organisateur de la réunion. Coché, les participants connectés le reçoivent aussi par e-mail.",
       "record": "Enregistrer aussi la vidéo"
     },
     "translations": {
@@ -51,6 +53,8 @@
     "language": "Langue parlée",
     "languageAuto": "Détection automatique",
     "summary": "Compte rendu à la fin de la réunion",
+    "shareSummary": "Partager avec les participants",
+    "shareSummaryHint": "Le compte rendu va à l'organisateur de la réunion. Coché, les participants connectés le reçoivent aussi par e-mail.",
     "record": "Enregistrer aussi la vidéo",
     "noEntitlement": "La transcription après la réunion n'est pas activée pour votre compte."
   },
@@ -61,7 +65,8 @@
     "ownEmail": "Le compte rendu vous sera envoyé à <recipient>{{email}}</recipient>",
     "generic": "Le compte rendu sera envoyé à l'organisateur de la réunion.",
     "ownEmailTranscript": "La transcription vous sera envoyée à <recipient>{{email}}</recipient>",
-    "genericTranscript": "La transcription sera envoyée à l'organisateur de la réunion."
+    "genericTranscript": "La transcription sera envoyée à l'organisateur de la réunion.",
+    "sharedSuffix": "Il sera aussi partagé avec les participants connectés."
   },
   "catchupToast": {
     "body": "Le résumé de ce qui s'est dit avant votre arrivée est prêt.",

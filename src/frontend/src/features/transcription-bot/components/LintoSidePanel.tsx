@@ -49,8 +49,15 @@ export const LintoSidePanel = () => {
   const { t } = useTranslation('transcription-bot', { keyPrefix: 'lintoBot' })
 
   const { enabled } = useLintoConfig()
-  const { running, catchup, summary, summaryService, record, error } =
-    useSnapshot(lintoStore)
+  const {
+    running,
+    catchup,
+    summary,
+    summaryService,
+    shareSummary,
+    record,
+    error,
+  } = useSnapshot(lintoStore)
 
   const apiRoomData = useRoomData()
   const roomId = apiRoomData?.livekit?.room
@@ -157,6 +164,7 @@ export const LintoSidePanel = () => {
           // both options are hidden and the run carries none.
           summary: canSummarize && summary,
           summaryService,
+          shareSummary: canSummarize && summary && shareSummary,
           catchup: canSummarize && catchup,
           record: hasScreenRecordingAccess ? record : false,
           translations: [...lintoStore.selectedTranslations],
@@ -174,14 +182,19 @@ export const LintoSidePanel = () => {
       console.warn('LinTO: missing room id or token')
       return
     }
-    // Snapshot the summary intent BEFORE stopping: the recap email always goes
-    // out, the toast says whether it holds a summary or the transcript alone.
-    const summaryWasOn = canSummarize && lintoStore.summary
-    const startedByMe = lintoStore.startedByMe
     lintoStore.localActionUntil = Date.now() + LOCAL_ACTION_GUARD_MS
     try {
-      await stopLintoLive({ roomId, token })
-      notifyLintoSummarySaving(startedByMe, user?.email, summaryWasOn)
+      // The recap email always goes out: the answer says to whom, and whether
+      // it holds a summary (shared with the participants) or the transcript.
+      const result = await stopLintoLive({ roomId, token })
+      if (result.status === 'stopped') {
+        notifyLintoSummarySaving({
+          recipientIsMe: result.recipient_is_you === true,
+          email: user?.email,
+          summary: result.summary !== false,
+          shared: result.share_summary === true,
+        })
+      }
     } catch (err) {
       console.error('Failed to stop LinTO transcription:', err)
     }
@@ -337,7 +350,29 @@ export const LintoSidePanel = () => {
                   <Text variant="sm">{t('options.summary')}</Text>
                 </Checkbox>
                 {summary && (
-                  <SummaryServicePicker isDisabled={controlsDisabled} />
+                  <>
+                    <SummaryServicePicker isDisabled={controlsDisabled} />
+                    <Checkbox
+                      size="sm"
+                      data-testid="linto-mode-share-summary"
+                      isSelected={shareSummary}
+                      onChange={(value) => {
+                        lintoStore.shareSummary = value
+                      }}
+                      isDisabled={controlsDisabled}
+                    >
+                      <Text variant="sm">{t('options.shareSummary')}</Text>
+                    </Checkbox>
+                    <Text
+                      variant="smNote"
+                      className={css({
+                        paddingLeft: '1.625rem',
+                        marginTop: '-0.5rem',
+                      })}
+                    >
+                      {t('options.shareSummaryHint')}
+                    </Text>
+                  </>
                 )}
               </>
             )}

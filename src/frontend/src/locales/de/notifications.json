@@ -55,11 +55,14 @@
   "recordingSave": {
     "transcript": {
       "message": "Deine Transkription wird gespeichert! Du erhältst eine E-Mail auf <strong>{{email}}</strong>, sobald die Transkription bereit ist.",
-      "default": "Deine Transkription wird gespeichert! Du erhältst das Transkript per E-Mail, sobald es bereit ist."
+      "default": "Deine Transkription wird gespeichert! Du erhältst das Transkript per E-Mail, sobald es bereit ist.",
+      "organizer": "Die Aufzeichnung wird gespeichert! Die organisierende Person des Meetings erhält eine E-Mail, sobald das Transkript bereit ist.",
+      "shared": "Das Protokoll wird auch mit den angemeldeten Teilnehmenden geteilt."
     },
     "screenRecording": {
       "message": "Deine Aufzeichnung wird gespeichert! Du erhältst eine E-Mail auf <strong>{{email}}</strong>, sobald sie bereit ist.",
-      "default": "Deine Aufzeichnung wird gespeichert! Du erhältst eine E-Mail, sobald sie bereit ist."
+      "default": "Deine Aufzeichnung wird gespeichert! Du erhältst eine E-Mail, sobald sie bereit ist.",
+      "organizer": "Die Aufzeichnung wird gespeichert! Die organisierende Person des Meetings erhält eine E-Mail, sobald sie bereit ist."
     }
   },
   "roleChanged": {

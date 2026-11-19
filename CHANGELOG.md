@@ -20,6 +20,7 @@ and this project adheres to
 - ✨(backend) summary on/off and service in the recording options (deferred pipeline)
 - ✨(frontend) caption language picked from a chevron menu next to the CC button
 - ✨(backend) option to email the summary to the signed-in participants
+- ✨(frontend) "share with the participants" option of both transcription tools
 
 ### Changed
 
@@ -45,6 +46,7 @@ and this project adheres to
 ### Fixed
 
 - 🐛(backend) recordings, transcripts and summaries go to the room owner
+- 🐛(frontend) the stop toast says who receives the recording or the summary
 - 🐛(frontend) send a VP9/AV1 screen share as one full-resolution stream again
 - 🐛(backend) notify a recording once when the egress webhook and storage polling race
 - 📌(summary) pin kombu to keep celery workers compatible with redis 5

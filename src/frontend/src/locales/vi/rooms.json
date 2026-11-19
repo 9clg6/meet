@@ -382,7 +382,7 @@
     "body": "Chép lời lên đến {{max_duration}} thời gian họp.",
     "bodyWithoutMaxDuration": "Chép lời cuộc họp của bạn không giới hạn.",
     "details": {
-      "receiver": "Bản chép lời sẽ được gửi đến người tổ chức và đồng tổ chức.",
+      "receiver": "Bản chép lời sẽ được gửi đến người tổ chức cuộc họp.",
       "destination": "Một tài liệu mới sẽ được tạo trên",
       "destinationUnknown": "Một tài liệu mới sẽ được tạo",
       "language": "Ngôn ngữ cuộc họp:",
@@ -438,7 +438,7 @@
     "linkMore": "Mở tài liệu",
     "linkAriaLabel": "Mở tài liệu về ghi - mở trong cửa sổ mới",
     "details": {
-      "receiver": "Bản ghi sẽ được gửi đến người tổ chức và đồng tổ chức.",
+      "receiver": "Bản ghi sẽ được gửi đến người tổ chức cuộc họp.",
       "destination": "Bản ghi này sẽ được lưu tạm thời trên máy chủ của chúng tôi",
       "loading": "Đang bắt đầu ghi",
       "linkMore": "Tìm hiểu thêm",

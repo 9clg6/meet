@@ -55,11 +55,14 @@
   "recordingSave": {
     "transcript": {
       "message": "Your recording is being saved! We’ll send the transcript to <strong>{{email}}</strong> as soon as it’s ready.",
-      "default": "Your recording is being saved! We’ll send the transcript to your email as soon as it’s ready."
+      "default": "Your recording is being saved! We’ll send the transcript to your email as soon as it’s ready.",
+      "organizer": "The recording is being saved! The meeting organizer will get an email as soon as the transcript is ready.",
+      "shared": "The summary will also be shared with the signed-in participants."
     },
     "screenRecording": {
       "message": "Your recording is being saved! We’ll send a notification to <strong>{{email}}</strong> as soon as it’s ready.",
-      "default": "Your recording is being saved! We’ll send a notification to your email as soon as it’s ready."
+      "default": "Your recording is being saved! We’ll send a notification to your email as soon as it’s ready.",
+      "organizer": "The recording is being saved! The meeting organizer will get an email as soon as it’s ready."
     }
   },
   "roleChanged": {

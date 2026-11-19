@@ -12,6 +12,8 @@
       "catchupHint": "On arrival, a participant sees a summary of what they missed.",
       "summary": "Summary at the end of the meeting",
       "summaryService": "Type of summary",
+      "shareSummary": "Share with the participants",
+      "shareSummaryHint": "The summary goes to the meeting organizer. Checked, signed-in participants also get it by email.",
       "record": "Also record the video"
     },
     "translations": {
@@ -51,6 +53,8 @@
     "language": "Spoken language",
     "languageAuto": "Automatic detection",
     "summary": "Summary at the end of the meeting",
+    "shareSummary": "Share with the participants",
+    "shareSummaryHint": "The summary goes to the meeting organizer. Checked, signed-in participants also get it by email.",
     "record": "Also record the video",
     "noEntitlement": "Transcription after the meeting is not enabled for your account."
   },
@@ -61,7 +65,8 @@
     "ownEmail": "The summary will be sent to <recipient>{{email}}</recipient>",
     "generic": "The summary will be sent to the meeting organizer.",
     "ownEmailTranscript": "The transcript will be sent to <recipient>{{email}}</recipient>",
-    "genericTranscript": "The transcript will be sent to the meeting organizer."
+    "genericTranscript": "The transcript will be sent to the meeting organizer.",
+    "sharedSuffix": "It will also be shared with the signed-in participants."
   },
   "catchupToast": {
     "body": "The summary of what was said before you arrived is ready.",

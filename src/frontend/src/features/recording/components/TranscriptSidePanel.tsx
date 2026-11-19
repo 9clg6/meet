@@ -80,7 +80,8 @@ export const TranscriptSidePanel = () => {
   } = useLintoCapabilities()
   const { active: isLintoActive } = useLintoStatus()
   const { openLinto } = useSidePanel()
-  const { lintoSummary, lintoSummaryService } = useSnapshot(recordingStore)
+  const { lintoSummary, lintoSummaryService, lintoShareSummary } =
+    useSnapshot(recordingStore)
 
   const hasTranscriptAccess = useHasRecordingAccess(
     RecordingMode.Transcript,
@@ -130,7 +131,7 @@ export const TranscriptSidePanel = () => {
     }
     try {
       if (statuses.isStarted || statuses.isStarting) {
-        await stopRecording({ id: roomId })
+        const stopped = await stopRecording({ id: roomId })
         setIncludeScreenRecording(false)
 
         await notifyParticipants({
@@ -138,7 +139,11 @@ export const TranscriptSidePanel = () => {
         })
         notifyRecordingSaveInProgress(
           RecordingMode.Transcript,
-          room.localParticipant
+          room.localParticipant,
+          {
+            recipientIsMe: stopped.recipient_is_you === true,
+            shared: stopped.share_summary === true,
+          }
         )
       } else {
         const withScreenRecording =
@@ -162,6 +167,10 @@ export const TranscriptSidePanel = () => {
             ...(withSummary &&
               lintoSummaryService && {
                 summary_service: lintoSummaryService,
+              }),
+            ...(withSummary &&
+              lintoShareSummary && {
+                share_summary: true,
               }),
           }),
           collect_metadata: isMetadataCollectorEnabled,
@@ -357,13 +366,35 @@ export const TranscriptSidePanel = () => {
                   <Text variant="sm">{tLinto('summary')}</Text>
                 </Checkbox>
                 {lintoSummary && (
-                  <SummaryServicePicker
-                    isDisabled={controlsDisabled}
-                    value={lintoSummaryService}
-                    onChange={(route) => {
-                      recordingStore.lintoSummaryService = route
-                    }}
-                  />
+                  <>
+                    <SummaryServicePicker
+                      isDisabled={controlsDisabled}
+                      value={lintoSummaryService}
+                      onChange={(route) => {
+                        recordingStore.lintoSummaryService = route
+                      }}
+                    />
+                    <Checkbox
+                      size="sm"
+                      data-testid="transcript-mode-share-summary"
+                      isSelected={lintoShareSummary}
+                      onChange={(value) => {
+                        recordingStore.lintoShareSummary = value
+                      }}
+                      isDisabled={controlsDisabled}
+                    >
+                      <Text variant="sm">{tLinto('shareSummary')}</Text>
+                    </Checkbox>
+                    <Text
+                      variant="smNote"
+                      className={css({
+                        paddingLeft: '1.625rem',
+                        marginTop: '-0.5rem',
+                      })}
+                    >
+                      {tLinto('shareSummaryHint')}
+                    </Text>
+                  </>
                 )}
               </>
             )}

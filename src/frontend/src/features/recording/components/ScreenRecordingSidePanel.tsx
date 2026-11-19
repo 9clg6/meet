@@ -110,14 +110,15 @@ export const ScreenRecordingSidePanel = () => {
     try {
       if (statuses.isStarted || statuses.isStarting) {
         setIncludeTranscript(false)
-        await stopRecording({ id: roomId })
+        const stopped = await stopRecording({ id: roomId })
 
         await notifyParticipants({
           type: NotificationType.ScreenRecordingStopped,
         })
         notifyRecordingSaveInProgress(
           RecordingMode.ScreenRecording,
-          room.localParticipant
+          room.localParticipant,
+          { recipientIsMe: stopped.recipient_is_you === true }
         )
       } else {
         const recordingOptions = {

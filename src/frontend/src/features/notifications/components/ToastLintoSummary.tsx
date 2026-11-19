@@ -10,22 +10,22 @@ import { css } from '@/styled-system/css'
 
 /**
  * LinTO summary-email toast (calque of ToastRecordingSaving). The branch is
- * carried on the toast content, not read from a store: `startedByMe` + `email`
- * are pushed by notifyLintoSummarySaving, so this stays decoupled from the
- * transcription-bot feature.
+ * carried on the toast content, pushed by notifyLintoSummarySaving, so this
+ * stays decoupled from the transcription-bot feature.
  */
 export function ToastLintoSummary({ state, ...props }: Readonly<ToastProps>) {
   const { t } = useTranslation('transcription-bot', { keyPrefix: 'stopToast' })
   const ref = useRef(null)
   const { toastProps, contentProps } = useToast(props, state, ref)
 
-  const startedByMe = props.toast.content.startedByMe === true
+  const recipientIsMe = props.toast.content.recipientIsMe === true
   const email =
     typeof props.toast.content.email === 'string'
       ? props.toast.content.email
       : undefined
   // Without a summary the recap carries the transcript alone: say so.
   const withSummary = props.toast.content.summary !== false
+  const shared = withSummary && props.toast.content.shared === true
   const components = {
     recipient: (
       <strong
@@ -54,7 +54,7 @@ export function ToastLintoSummary({ state, ...props }: Readonly<ToastProps>) {
             whiteSpace: 'normal',
           })}
         >
-          {startedByMe && email ? (
+          {recipientIsMe && email ? (
             withSummary ? (
               <Trans
                 t={t}
@@ -74,6 +74,12 @@ export function ToastLintoSummary({ state, ...props }: Readonly<ToastProps>) {
             t('generic')
           ) : (
             t('genericTranscript')
+          )}
+          {shared && (
+            <>
+              <br />
+              {t('sharedSuffix')}
+            </>
           )}
         </Text>
       </HStack>

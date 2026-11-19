@@ -55,11 +55,14 @@
   "recordingSave": {
     "transcript": {
       "message": "Nous finalisons votre enregistrement ! Vous recevrez un e-mail à <strong>{{email}}</strong> dès que la transcription sera prête.",
-      "default": "Nous finalisons votre enregistrement ! Vous recevrez un e-mail dès que la transcription sera prête."
+      "default": "Nous finalisons votre enregistrement ! Vous recevrez un e-mail dès que la transcription sera prête.",
+      "organizer": "Nous finalisons l'enregistrement ! L'organisateur de la réunion recevra un e-mail dès que la transcription sera prête.",
+      "shared": "Le compte rendu sera aussi partagé avec les participants connectés."
     },
     "screenRecording": {
       "message": "Nous finalisons votre enregistrement ! Vous recevrez un e-mail à <strong>{{email}}</strong> dès qu’il sera prêt.",
-      "default": "Nous finalisons votre enregistrement ! Vous recevrez un e-mail dès qu’il sera prêt."
+      "default": "Nous finalisons votre enregistrement ! Vous recevrez un e-mail dès qu’il sera prêt.",
+      "organizer": "Nous finalisons l'enregistrement ! L'organisateur de la réunion recevra un e-mail dès qu'il sera prêt."
     }
   },
   "roleChanged": {

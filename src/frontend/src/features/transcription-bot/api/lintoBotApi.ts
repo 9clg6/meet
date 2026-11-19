@@ -136,6 +136,13 @@ export interface LintoRunState {
   user_id?: string | null
 }
 
+export interface LintoStopState {
+  status: string
+  summary?: boolean
+  share_summary?: boolean
+  recipient_is_you?: boolean
+}
+
 export interface StartLintoLiveParams {
   roomId: string
   token: string
@@ -154,6 +161,7 @@ const startLintoLive = ({
       translations: config.translations,
       summary: config.summary,
       summary_service: config.summary ? config.summaryService : undefined,
+      share_summary: config.summary && config.shareSummary,
       record: config.record,
       catchup: config.catchup,
     }),
@@ -167,8 +175,8 @@ export interface StopLintoLiveParams {
 const stopLintoLive = ({
   roomId,
   token,
-}: StopLintoLiveParams): Promise<{ status: string }> =>
-  fetchApi<{ status: string }>(`rooms/${roomId}/linto/stop/`, {
+}: StopLintoLiveParams): Promise<LintoStopState> =>
+  fetchApi<LintoStopState>(`rooms/${roomId}/linto/stop/`, {
     method: 'POST',
     headers: getLiveKitAuthHeaders(token),
   })
@@ -185,13 +193,9 @@ export function useStartLintoLive(
 }
 
 export function useStopLintoLive(
-  options?: UseMutationOptions<
-    { status: string },
-    ApiError,
-    StopLintoLiveParams
-  >
+  options?: UseMutationOptions<LintoStopState, ApiError, StopLintoLiveParams>
 ) {
-  return useMutation<{ status: string }, ApiError, StopLintoLiveParams>({
+  return useMutation<LintoStopState, ApiError, StopLintoLiveParams>({
     mutationFn: stopLintoLive,
     ...options,
   })

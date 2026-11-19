@@ -43,11 +43,14 @@
   "recordingSave": {
     "transcript": {
       "message": "Bản ghi của bạn đang được lưu! Chúng tôi sẽ gửi bản chép lời đến <strong>{{email}}</strong> ngay khi sẵn sàng.",
-      "default": "Bản ghi của bạn đang được lưu! Chúng tôi sẽ gửi bản chép lời đến email của bạn ngay khi sẵn sàng."
+      "default": "Bản ghi của bạn đang được lưu! Chúng tôi sẽ gửi bản chép lời đến email của bạn ngay khi sẵn sàng.",
+      "organizer": "Bản ghi đang được lưu! Người tổ chức cuộc họp sẽ nhận được email ngay khi bản chép lời sẵn sàng.",
+      "shared": "Biên bản cũng sẽ được chia sẻ với người tham gia đã đăng nhập."
     },
     "screenRecording": {
       "message": "Bản ghi của bạn đang được lưu! Chúng tôi sẽ gửi thông báo đến <strong>{{email}}</strong> ngay khi sẵn sàng.",
-      "default": "Bản ghi của bạn đang được lưu! Chúng tôi sẽ gửi thông báo đến email của bạn ngay khi sẵn sàng."
+      "default": "Bản ghi của bạn đang được lưu! Chúng tôi sẽ gửi thông báo đến email của bạn ngay khi sẵn sàng.",
+      "organizer": "Bản ghi đang được lưu! Người tổ chức cuộc họp sẽ nhận được email ngay khi bản ghi sẵn sàng."
     }
   },
   "openMenu": "Mở menu"

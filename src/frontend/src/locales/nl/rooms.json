@@ -490,7 +490,7 @@
     "body": "Transcribeer tot {{max_duration}} aan vergadertijd.",
     "bodyWithoutMaxDuration": "Transcribeer uw vergadering zonder limiet.",
     "details": {
-      "receiver": "Het transcript wordt verzonden naar de host en de co-host.",
+      "receiver": "Het transcript wordt verzonden naar de organisator van de vergadering.",
       "destination": "Er wordt een nieuw document aangemaakt op",
       "destinationUnknown": "Een nieuw document wordt aangemaakt",
       "language": "Vergadertalen:",
@@ -562,7 +562,7 @@
     "linkMore": "Documentatie openen",
     "linkAriaLabel": "Documentatie over opname openen - opent in nieuw venster",
     "details": {
-      "receiver": "De opname wordt verzonden naar de host en co-hosts.",
+      "receiver": "De opname wordt verzonden naar de organisator van de vergadering.",
       "destination": "Deze opname wordt tijdelijk op onze servers bewaard",
       "loading": "Opname wordt gestart",
       "linkMore": "Meer informatie",

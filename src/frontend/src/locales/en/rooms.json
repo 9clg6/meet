@@ -490,7 +490,7 @@
     "body": "Transcribe up to {{max_duration}} of meeting time.",
     "bodyWithoutMaxDuration": "Transcribe your meeting without limits.",
     "details": {
-      "receiver": "The transcript will be sent to the host and co-hosts.",
+      "receiver": "The transcript will be sent to the meeting organizer.",
       "destination": "A new document will be created on",
       "destinationUnknown": "A new document will be created",
       "language": "Meeting language:",
@@ -562,7 +562,7 @@
     "linkMore": "Open documentation",
     "linkAriaLabel": "Open documentation about recording - opens in new window",
     "details": {
-      "receiver": "The recording will be sent to the host and co-hosts.",
+      "receiver": "The recording will be sent to the meeting organizer.",
       "destination": "This recording will be temporarily stored on our servers",
       "loading": "Starting recording",
       "linkMore": "Learn more",

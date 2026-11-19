@@ -13,6 +13,8 @@ export interface LintoBotConfig {
   // The summary service (LLM Gateway route) picked in the panel; undefined =
   // the instance default.
   summaryService?: string
+  // The summary also goes to the signed-in participants (default false).
+  shareSummary: boolean
   record: boolean
   // Target translation language codes (0..N).
   translations: string[]

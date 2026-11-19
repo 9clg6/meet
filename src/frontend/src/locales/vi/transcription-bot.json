@@ -12,6 +12,8 @@
       "catchupHint": "Khi vào, người tham gia thấy tóm tắt những gì đã bỏ lỡ.",
       "summary": "Biên bản khi kết thúc cuộc họp",
       "summaryService": "Loại biên bản",
+      "shareSummary": "Chia sẻ với người tham gia",
+      "shareSummaryHint": "Biên bản được gửi cho người tổ chức cuộc họp. Khi chọn, người tham gia đã đăng nhập cũng nhận được qua email.",
       "record": "Ghi cả video"
     },
     "translations": {
@@ -51,6 +53,8 @@
     "language": "Ngôn ngữ nói",
     "languageAuto": "Nhận diện tự động",
     "summary": "Biên bản khi kết thúc cuộc họp",
+    "shareSummary": "Chia sẻ với người tham gia",
+    "shareSummaryHint": "Biên bản được gửi cho người tổ chức cuộc họp. Khi chọn, người tham gia đã đăng nhập cũng nhận được qua email.",
     "record": "Ghi cả video",
     "noEntitlement": "Chép lời sau cuộc họp chưa được bật cho tài khoản của bạn."
   },
@@ -61,7 +65,8 @@
     "ownEmail": "Biên bản sẽ được gửi cho bạn tại <recipient>{{email}}</recipient>",
     "generic": "Biên bản sẽ được gửi cho người tổ chức cuộc họp.",
     "ownEmailTranscript": "Bản chép lời sẽ được gửi cho bạn tại <recipient>{{email}}</recipient>",
-    "genericTranscript": "Bản chép lời sẽ được gửi cho người tổ chức cuộc họp."
+    "genericTranscript": "Bản chép lời sẽ được gửi cho người tổ chức cuộc họp.",
+    "sharedSuffix": "Biên bản cũng sẽ được chia sẻ với người tham gia đã đăng nhập."
   },
   "catchupToast": {
     "body": "Bản tóm tắt những gì đã nói trước khi bạn tham gia đã sẵn sàng.",

@@ -55,11 +55,14 @@
   "recordingSave": {
     "transcript": {
       "message": "¡Estamos finalizando tu grabación! Recibirás un correo electrónico en <strong>{{email}}</strong> en cuanto la transcripción esté lista.",
-      "default": "¡Estamos finalizando tu grabación! Recibirás un correo electrónico en cuanto la transcripción esté lista."
+      "default": "¡Estamos finalizando tu grabación! Recibirás un correo electrónico en cuanto la transcripción esté lista.",
+      "organizer": "¡Estamos finalizando la grabación! El organizador de la reunión recibirá un correo electrónico en cuanto la transcripción esté lista.",
+      "shared": "El resumen también se compartirá con los participantes que hayan iniciado sesión."
     },
     "screenRecording": {
       "message": "¡Estamos finalizando tu grabación! Recibirás un correo electrónico en <strong>{{email}}</strong> en cuanto esté lista.",
-      "default": "¡Estamos finalizando tu grabación! Recibirás un correo electrónico en cuanto esté lista."
+      "default": "¡Estamos finalizando tu grabación! Recibirás un correo electrónico en cuanto esté lista.",
+      "organizer": "¡Estamos finalizando la grabación! El organizador de la reunión recibirá un correo electrónico en cuanto esté lista."
     }
   },
   "roleChanged": {

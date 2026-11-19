@@ -30,8 +30,7 @@ type LintoState = {
   // Django id of the participant who started the bot (room metadata / bot-status).
   userId?: string
   // True once I started the bot in this session. Set in the start onSuccess and
-  // deliberately NOT reset on stop (mirrors recordingStore.startedByMe) so the
-  // stop toast can address the summary email to my own address.
+  // deliberately NOT reset on stop: a starter may still stop a shared run.
   startedByMe: boolean
   // Epoch ms until which the shared-state sync must NOT overwrite the store: a
   // guard against a stale bot-status / metadata roundtrip clobbering optimistic
@@ -45,6 +44,8 @@ type LintoState = {
   summary: boolean
   // Summary service route picked in the panel (undefined → instance default).
   summaryService?: string
+  // The summary also goes to the signed-in participants (default OFF).
+  shareSummary: boolean
   record: boolean
   selectedLanguage?: string
   // ASR profile id picked in the dropdown ("" / undefined → backend picks first).
@@ -81,6 +82,7 @@ export const lintoStore = proxy<LintoState>({
   catchup: true,
   summary: true,
   summaryService: undefined,
+  shareSummary: false,
   record: false,
   selectedLanguage: undefined,
   selectedProfile: undefined,
@@ -98,5 +100,5 @@ export const resetLintoRun = () => {
   // blank journal (clearTranscript) and must not show the previous summary.
   lintoStore.joinedAt = null
   lintoStore.catchUp = { ...IDLE_CATCH_UP }
-  // `startedByMe` is intentionally kept (parity with recordingStore).
+  // `startedByMe` is intentionally kept.
 }
