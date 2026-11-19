@@ -32,61 +32,8 @@ class _MemoryCheckpoint(linto_task._StepCheckpoint):
         super().__init__(get=self.steps.get, mark=_mark)
 
 
-class TestSummaryPreview:
-    """The summary as the LLM answered it, made fit for the email."""
-
-    @pytest.mark.parametrize(
-        "content",
-        [
-            f"```markdown\n{REPORT}\n```",
-            f"```\n{REPORT}\n```\n",
-            f"  ```md\n{REPORT}\n```  ",
-            f"```markdown\n{REPORT}",  # cut answer: no closing fence
-        ],
-    )
-    def test_a_fence_wrapping_the_whole_summary_is_dropped(self, content):
-        """A summary wrapped in a code fence renders as Markdown, not code."""
-        preview = linto_task._extract_summary_preview({"content": content})
-        assert preview == REPORT
-        html = linto_task._render_summary_html(preview)
-        assert "<h1>" in html
-        assert "<pre>" not in html
-
-    def test_a_plain_summary_is_kept(self):
-        """Nothing to strip: the summary is returned as is."""
-        assert linto_task._extract_summary_preview({"content": REPORT}) == REPORT
-
-    def test_code_blocks_inside_the_summary_are_kept(self):
-        """Only a fence around the WHOLE summary goes."""
-        content = f"{REPORT}\n\n```\nsome code\n```"
-        assert linto_task._extract_summary_preview({"content": content}) == content
-
-    def test_a_dict_content_is_unwrapped_too(self):
-        """The export content can come as ``{"text": ...}``."""
-        content = {"text": f"```markdown\n{REPORT}\n```"}
-        assert linto_task._extract_summary_preview({"content": content}) == REPORT
-
-    def test_a_short_summary_is_not_truncated(self):
-        """Under the limit the preview is the whole summary."""
-        assert linto_task._truncate_summary(REPORT) == REPORT
-
-    def test_a_long_summary_is_cut_on_a_line(self):
-        """Whole lines up to the limit, then an ellipsis."""
-        lines = [f"- point {i} " + "x" * 40 for i in range(100)]
-        preview = linto_task._truncate_summary("\n".join(lines), limit=500)
-        body, ellipsis = preview.rsplit("\n\n", 1)
-        assert ellipsis == "…"
-        assert len(body) <= 500
-        assert all(line in lines for line in body.splitlines())
-
-    def test_a_single_long_line_is_cut_on_a_word(self):
-        """A first line over the limit is cut between two words."""
-        preview = linto_task._truncate_summary("word " * 200, limit=52)
-        assert preview == " ".join(["word"] * 10) + "\n\n…"
-
-
 class TestRecapEmail:
-    """The recap email puts the Drive link before a bounded summary preview."""
+    """The recap email links the Drive folder and attaches the document."""
 
     def _send(self, **kwargs):
         user = factories.UserFactory(email="owner@example.com", language="en-us")
@@ -95,7 +42,6 @@ class TestRecapEmail:
             "room_name": "okr-mcwr-mqk",
             "meeting_dt": datetime(2026, 9, 24, 14, 32, tzinfo=timezone.utc),
             "with_summary": True,
-            "summary_preview": REPORT,
             "twake_drive_link": "https://owner-drive.example.com/#/folder/dir-1",
             "pdf_content": None,
             "pub_filename": "summary.pdf",
@@ -107,29 +53,6 @@ class TestRecapEmail:
         async_to_sync(linto_task._send_recap_emails)(**params)
         assert len(mail.outbox) == 1
         return mail.outbox[0]
-
-    def test_the_drive_link_comes_before_the_summary(self):
-        """A long summary can no longer push the link out of sight."""
-        message = self._send()
-        html = message.alternatives[0][0]
-        link = html.index("https://owner-drive.example.com/#/folder/dir-1")
-        assert link < html.index("Analytical Report")
-        assert message.body.index("owner-drive") < message.body.index("Analytical")
-
-    def test_the_html_preview_is_bounded(self):
-        """The email shows the start of a long report, not all of it."""
-        report = REPORT + "".join(f"\n\n## Topic {i}\n\nDetail {i}" for i in range(400))
-        message = self._send(summary_preview=report)
-        html = message.alternatives[0][0]
-        assert "Topic 1<" in html
-        assert "Topic 399" not in html
-        assert "…" in html
-
-    def test_no_summary_no_preview_heading(self):
-        """Without a summary the email does not announce a preview."""
-        message = self._send(summary_preview=None)
-        assert "Summary preview" not in message.alternatives[0][0]
-        assert "Summary preview" not in message.body
 
     def test_with_a_summary_the_email_announces_it(self):
         message = self._send(twake_drive_link=None, pdf_content=b"%PDF")
@@ -148,11 +71,9 @@ class TestRecapEmail:
 
     def test_without_a_summary_the_email_announces_the_transcript_alone(self):
         """No summary (not entitled, or turned off): the email stands on the
-        transcript — no summary promised, no empty preview, the attachment
-        named for what it is."""
+        transcript — no summary promised, the attachment named for what it is."""
         message = self._send(
             with_summary=False,
-            summary_preview=None,
             twake_drive_link=None,
             pdf_content=b"docx bytes",
             pub_filename="2026 09 24 - Transcript.docx",
@@ -167,7 +88,8 @@ class TestRecapEmail:
         assert message.attachments[0][0] == "2026 09 24 - Transcript.docx"
 
     def test_without_a_summary_the_drive_link_stays(self):
-        message = self._send(with_summary=False, summary_preview=None)
+        """The Drive link does not depend on the summary."""
+        message = self._send(with_summary=False)
         assert "The transcription of" in message.body
         assert "owner-drive.example.com" in message.body
         assert "summary" not in message.body.lower()
@@ -176,7 +98,7 @@ class TestRecapEmail:
 class TestSharedSummary:
     """The summary goes to the signed-in attendees, the recipient aside."""
 
-    SUMMARY = {"success": True, "job_id": "job-1"}
+    SUMMARY = {"success": True, "job_id": "job-1", "content": REPORT}
 
     def _share(self, attendee_ids, **kwargs):
         params = {
@@ -185,7 +107,6 @@ class TestSharedSummary:
             "room_name": "okr-mcwr-mqk",
             "meeting_dt": datetime(2026, 9, 24, 14, 32, tzinfo=timezone.utc),
             "summary_result": self.SUMMARY,
-            "summary_preview": REPORT,
             "pdf_content": b"DOCX",
             "pub_filename": "summary.docx",
             "pub_mime": "application/vnd.openxmlformats-officedocument"
@@ -212,7 +133,7 @@ class TestSharedSummary:
         for text in (message.body, message.alternatives[0][0]):
             assert "shares its summary with the participants" in text
             assert "The summary document is attached" in text
-            assert "Analytical Report" in text
+            assert "Analytical Report" not in text
             assert "Twake" not in text
         assert sorted(checkpoint.steps["shared"]) == sorted(
             [str(alice.id), str(bob.id)]
@@ -306,7 +227,6 @@ class TestTwakeLinkOnResume:
                 conversation_id="conv-1",
                 recipient_user=owner,
                 transcript_text="hello",
-                summary_preview=None,
                 pdf_content=None,
                 pub_filename="summary.pdf",
                 pub_mime="application/pdf",

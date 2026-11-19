@@ -376,7 +376,7 @@ class TestHappyPath:
 
         assert len(mail.outbox) == 1
         email = mail.outbox[0]
-        assert "Key points" in email.body
+        assert "Key points" not in email.body
         filename, content, mimetype = email.attachments[0]
         assert filename.endswith(".pdf")
         assert content == b"%PDF"
@@ -866,7 +866,7 @@ class TestDeliveryWithoutSummary:
         assert any(name.endswith(" - Summary.pdf") for name in filenames), filenames
         body = mail.outbox[0].body
         assert "The transcription and summary of" in body
-        assert "Key points" in body
+        assert "Key points" not in body
 
     def test_a_payload_without_the_flag_is_summarized(self, no_twake, fast_resolve):
         """A delivery queued before the flag existed only had the summary on."""

@@ -31,12 +31,6 @@
             {% endblocktrans %}
           </mj-text>
           <mj-raw>{% endif %}</mj-raw>
-          <mj-raw>{% if summary_preview_html %}</mj-raw>
-          <mj-text>
-            <p><strong>{% trans "Summary preview:" %}</strong></p>
-            <div>{{ summary_preview_html|safe }}</div>
-          </mj-text>
-          <mj-raw>{% endif %}</mj-raw>
           <mj-text>
             {% blocktrans %}
             If you have any questions or need assistance, please contact our support team at {{support_email}}.

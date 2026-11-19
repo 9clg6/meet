@@ -41,6 +41,7 @@ and this project adheres to
 - 💄(frontend) opening the meeting tools during a run lands on the running tool's panel
 - 💄(frontend) shorter wording of the two transcription tools
 - ✨(backend) the recap email always carries the document, Twake Drive or not
+- 🔥(backend) no more summary preview in the emails: the document is attached
 - 💄(frontend) the summary type is picked on cards (icon, name, description)
 
 ### Fixed

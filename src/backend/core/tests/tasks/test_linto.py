@@ -520,6 +520,6 @@ class TestDelivery:
         ]
         shared = [m for m in mail.outbox if m.to != ["owner@example.com"]]
         assert all(m.attachments[0][1] == b"DOCX" for m in shared)
-        assert all("Decisions" in m.body for m in shared)
+        assert all("Decisions" not in m.body for m in shared)
         rec.refresh_from_db()
         assert len(rec.linto_state["steps"]["shared"]) == 2

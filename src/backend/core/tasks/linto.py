@@ -23,7 +23,6 @@ a Celery retry.
 
 import asyncio
 import logging
-import re
 import smtplib
 from datetime import datetime
 from types import SimpleNamespace
@@ -38,8 +37,6 @@ from django.utils import timezone
 from django.utils.translation import get_language, override
 from django.utils.translation import gettext_lazy as _
 
-import bleach
-import markdown as markdown_lib
 from asgiref.sync import async_to_sync, sync_to_async
 
 from core import models
@@ -71,75 +68,6 @@ from core.tasks._state import (
 from core.tasks._task import task
 
 logger = logging.getLogger(__name__)
-
-_SUMMARY_HTML_TAGS = [
-    "p",
-    "br",
-    "strong",
-    "em",
-    "b",
-    "i",
-    "u",
-    "ul",
-    "ol",
-    "li",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "blockquote",
-    "code",
-    "pre",
-    "a",
-]
-_SUMMARY_HTML_ATTRS = {"a": ["href", "title"]}
-
-# A code fence around the WHOLE answer (LLMs often reply ```markdown … ```),
-# closing fence optional (a cut answer). Same rule as the LLM Gateway applies
-# to its own documents.
-_WRAPPING_FENCE = re.compile(r"\A\s*```[^\n]*\n(.*?)(?:\n```)?\s*\Z", re.DOTALL)
-
-# The email carries a preview of the summary, not the whole report (the full
-# document is in Twake Drive or attached): a long report would bury the rest.
-SUMMARY_PREVIEW_MAX_CHARS = 1500
-
-
-def _strip_wrapping_fence(text):
-    """Drop a code fence wrapping the whole summary, so it renders as Markdown
-    instead of one code block. Code blocks inside the text are kept."""
-    match = _WRAPPING_FENCE.match(text)
-    return match.group(1) if match else text
-
-
-def _truncate_summary(text, limit=SUMMARY_PREVIEW_MAX_CHARS):
-    """The first whole lines of the summary up to ``limit`` characters, then an
-    ellipsis. A first line longer than the limit is cut on a word boundary."""
-    if not text or len(text) <= limit:
-        return text
-    kept, size = [], 0
-    for line in text.splitlines():
-        if size + len(line) > limit:
-            break
-        kept.append(line)
-        size += len(line) + 1
-    if not kept:
-        kept = [text[:limit].rsplit(" ", 1)[0]]
-    return "\n".join(kept).rstrip() + "\n\n…"
-
-
-def _render_summary_html(text):
-    """Render LinTO summary markdown to a sanitized HTML fragment."""
-    if not text:
-        return None
-    html = markdown_lib.markdown(text, extensions=["extra", "sane_lists", "nl2br"])
-    return bleach.clean(
-        html,
-        tags=_SUMMARY_HTML_TAGS,
-        attributes=_SUMMARY_HTML_ATTRS,
-        strip=True,
-    )
 
 
 async def _await_media(handle, recording_id) -> dict:
@@ -279,17 +207,6 @@ def _document_filename(meeting, pub_format, language, summary_result):
     if _has_summary(summary_result):
         return build_summary_filename(meeting, pub_format, language)
     return build_transcript_document_filename(meeting, pub_format, language)
-
-
-def _extract_summary_preview(summary_result):
-    """Extract the human-readable summary text from the SDK summary result."""
-    if summary_result.get("content"):
-        content = summary_result["content"]
-        if isinstance(content, dict):
-            content = content.get("text") or content.get("content") or str(content)
-        if isinstance(content, str):
-            return _strip_wrapping_fence(content)
-    return None
 
 
 async def _tag_and_move(linto, conversation_id, log_id, checkpoint):
@@ -545,7 +462,6 @@ async def _deliver_to_twake(  # noqa: PLR0913 - delivery needs the full context
     conversation_id,
     recipient_user,
     transcript_text,
-    summary_preview,
     pdf_content,
     pub_filename,
     pub_mime,
@@ -659,7 +575,7 @@ async def _deliver_to_twake(  # noqa: PLR0913 - delivery needs the full context
     return twake_drive_link
 
 
-def _mail_context(user, room_name, meeting_dt, summary_preview, **extra):
+def _mail_context(user, room_name, meeting_dt, **extra):
     """The context shared by the delivery emails, in the user's time zone."""
     local_dt = meeting_dt.astimezone(user.timezone)
     return {
@@ -669,10 +585,6 @@ def _mail_context(user, room_name, meeting_dt, summary_preview, **extra):
         "room_name": room_name,
         "recording_date": local_dt.strftime("%Y-%m-%d"),
         "recording_time": local_dt.strftime("%H:%M"),
-        "summary_preview": summary_preview,
-        "summary_preview_html": _render_summary_html(
-            _truncate_summary(summary_preview)
-        ),
         **extra,
     }
 
@@ -701,7 +613,6 @@ async def _send_recap_emails(  # noqa: PLR0913 - recap email needs the full cont
     room_name,
     meeting_dt,
     with_summary,
-    summary_preview,
     twake_drive_link,
     pdf_content,
     pub_filename,
@@ -729,7 +640,6 @@ async def _send_recap_emails(  # noqa: PLR0913 - recap email needs the full cont
             user,
             room_name,
             meeting_dt,
-            summary_preview,
             with_summary=with_summary,
             twake_drive_link=twake_drive_link,
             has_pdf_attachment=attachment is not None,
@@ -762,7 +672,6 @@ async def _share_summary(  # noqa: PLR0913 - the shared summary needs the full c
     room_name,
     meeting_dt,
     summary_result,
-    summary_preview,
     pdf_content,
     pub_filename,
     pub_mime,
@@ -786,7 +695,6 @@ async def _share_summary(  # noqa: PLR0913 - the shared summary needs the full c
             user,
             room_name,
             meeting_dt,
-            summary_preview,
             has_attachment=attachment is not None,
         )
         try:
@@ -1075,7 +983,6 @@ async def _process_linto_transcription_sync(recording_id):  # noqa: PLR0915
     # Prepare publication filename and mime type + summary preview text
     room_name = recording.room.name or "Meeting"
     pub_mime = _publication_mime(pub_format)
-    summary_preview = _extract_summary_preview(summary_result)
 
     # 5.8 Share the conversation with the room owner. Folder and file names on
     # Twake Drive follow their language.
@@ -1127,7 +1034,6 @@ async def _process_linto_transcription_sync(recording_id):  # noqa: PLR0915
         conversation_id=conversation_id,
         recipient_user=recipient_user,
         transcript_text=transcript_text,
-        summary_preview=summary_preview,
         pdf_content=pdf_content,
         pub_filename=pub_filename,
         pub_mime=pub_mime,
@@ -1144,7 +1050,6 @@ async def _process_linto_transcription_sync(recording_id):  # noqa: PLR0915
         room_name=room_name,
         meeting_dt=recording.created_at,
         with_summary=_has_summary(summary_result),
-        summary_preview=summary_preview,
         twake_drive_link=twake_drive_link,
         pdf_content=pdf_content,
         pub_filename=pub_filename,
@@ -1159,7 +1064,6 @@ async def _process_linto_transcription_sync(recording_id):  # noqa: PLR0915
         room_name=room_name,
         meeting_dt=recording.created_at,
         summary_result=summary_result,
-        summary_preview=summary_preview,
         pdf_content=pdf_content,
         pub_filename=pub_filename,
         pub_mime=pub_mime,
@@ -1472,7 +1376,6 @@ async def _process_bot_live_summary_sync(room_id):
     language = recipient_user.language if recipient_user else None
     pub_mime = _publication_mime(pub_format)
     pub_filename = _document_filename(meeting, pub_format, language, summary_result)
-    summary_preview = _extract_summary_preview(summary_result)
 
     # 5. Share + Twake + email. Twake Drive also gets the meeting audio Studio
     # kept for the run, as an OGG (soft: the text files go without it).
@@ -1485,7 +1388,6 @@ async def _process_bot_live_summary_sync(room_id):
         conversation_id=conversation_id,
         recipient_user=recipient_user,
         transcript_text=transcript_text,
-        summary_preview=summary_preview,
         pdf_content=pdf_content,
         pub_filename=pub_filename,
         pub_mime=pub_mime,
@@ -1506,7 +1408,6 @@ async def _process_bot_live_summary_sync(room_id):
         room_name=room_name,
         meeting_dt=meeting_dt,
         with_summary=_has_summary(summary_result),
-        summary_preview=summary_preview,
         twake_drive_link=twake_drive_link,
         pdf_content=pdf_content,
         pub_filename=pub_filename,
@@ -1521,7 +1422,6 @@ async def _process_bot_live_summary_sync(room_id):
         room_name=room_name,
         meeting_dt=meeting_dt,
         summary_result=summary_result,
-        summary_preview=summary_preview,
         pdf_content=pdf_content,
         pub_filename=pub_filename,
         pub_mime=pub_mime,
