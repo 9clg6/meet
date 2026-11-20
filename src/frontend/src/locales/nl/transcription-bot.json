@@ -6,7 +6,11 @@
     "stop": "Transcriptie stoppen",
     "notAvailable": "Live transcriptie is niet beschikbaar in deze vergadering.",
     "noEntitlement": "Live transcriptie is niet ingeschakeld voor je account.",
-    "anotherModeStarted": "Er loopt een opname. <br/> Stop deze voordat je live transcribeert.",
+    "captionsOnly": {
+      "heading": "Live ondertiteling",
+      "start": "Ondertiteling starten",
+      "stop": "Ondertiteling stoppen"
+    },
     "options": {
       "catchup": "Inhaalsamenvatting",
       "catchupHint": "Wie binnenkomt, ziet een samenvatting van wat hij heeft gemist.",
@@ -57,7 +61,7 @@
     "noEntitlement": "Transcriptie na de vergadering is niet ingeschakeld voor je account."
   },
   "banner": {
-    "inProgress": "Transcriptie bezig"
+    "inProgress": "Live transcriptie"
   },
   "stopToast": {
     "ownEmail": "Het verslag wordt naar je verzonden op <recipient>{{email}}</recipient>",
@@ -78,7 +82,8 @@
     "deferred": {
       "title": "Na de vergadering transcriberen",
       "body": "Opname die na de vergadering wordt getranscribeerd en samengevat."
-    }
+    },
+    "running": "Bezig"
   },
   "captions": {
     "label": "Ondertitels beschikbaar",

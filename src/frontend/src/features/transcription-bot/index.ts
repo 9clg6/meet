@@ -5,6 +5,7 @@ export { SummaryServicePicker } from './components/SummaryServicePicker'
 export { TranslationPicker } from './components/TranslationPicker'
 export { LintoBanner } from './components/LintoBanner'
 export { LintoProvider } from './components/LintoProvider'
+export { LiveCaptionsRow } from './components/LiveCaptionsRow'
 
 // hooks
 export { useLintoConfig } from './hooks/useLintoConfig'
@@ -12,6 +13,7 @@ export { useLintoStatus } from './hooks/useLintoStatus'
 export { useLintoEntitlement } from './hooks/useLintoEntitlement'
 export { useLintoCapabilities } from './hooks/useLintoCapabilities'
 export { useLintoTranscriptFeed } from './hooks/useLintoTranscriptFeed'
+export { useLiveCaptionsStopper } from './hooks/useLiveCaptionsStopper'
 
 // api — the Meet backend drives Studio with its own credential; the panel only
 // asks it to start or stop.

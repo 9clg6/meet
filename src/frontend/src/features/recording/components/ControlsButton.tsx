@@ -31,6 +31,9 @@ interface ControlsButtonProps {
   // Key (under the prefix) of the notice shown when another mode runs —
   // defaults to the egress wording; the LinTO live run has its own.
   anotherModeKey?: string
+  // Shown under the Stop button while the recording runs (the live captions
+  // that can run beside it).
+  runningFooter?: ReactNode
 }
 
 const MIN_SPINNER_DISPLAY_TIME = 2000
@@ -43,6 +46,7 @@ export const ControlsButton = ({
   isPendingToStop,
   openSidePanel,
   anotherModeKey = 'button.anotherModeStarted',
+  runningFooter,
 }: ControlsButtonProps) => {
   const { t } = useTranslation('rooms', { keyPrefix: i18nKeyPrefix })
 
@@ -116,6 +120,9 @@ export const ControlsButton = ({
         >
           {t('button.stop')}
         </Button>
+        {runningFooter && (
+          <div className={css({ marginTop: '1rem' })}>{runningFooter}</div>
+        )}
       </Layout>
     )
   }

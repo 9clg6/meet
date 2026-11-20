@@ -1,5 +1,6 @@
 import { A, Div, Icon, Text } from '@/primitives'
 import { css } from '@/styled-system/css'
+import { srOnly } from '@/styles/a11y'
 import { Button as RACButton } from 'react-aria-components'
 import { useTranslation } from 'react-i18next'
 import { ReactNode, useEffect, useRef } from 'react'
@@ -26,6 +27,9 @@ export interface ToolsButtonProps {
   description: string
   onPress: () => void
   dataAttr?: string
+  // The tool runs: a dot after its title (spoken as `runningLabel`).
+  isRunning?: boolean
+  runningLabel?: string
 }
 
 const ToolButton = ({
@@ -34,6 +38,8 @@ const ToolButton = ({
   description,
   onPress,
   dataAttr,
+  isRunning = false,
+  runningLabel,
 }: ToolsButtonProps) => {
   return (
     <RACButton
@@ -82,7 +88,31 @@ const ToolButton = ({
             fontWeight: 'semibold',
           })}
         >
-          {title}
+          <span>
+            {title}
+            {isRunning && (
+              <>
+                {/* Inline after the last word, even on a wrapped title. */}
+                <span
+                  aria-hidden="true"
+                  data-testid={dataAttr ? `${dataAttr}-running` : undefined}
+                  className={css({
+                    display: 'inline-block',
+                    width: '0.5rem',
+                    height: '0.5rem',
+                    marginLeft: '0.5rem',
+                    marginBottom: '0.125rem',
+                    verticalAlign: 'middle',
+                    borderRadius: '50%',
+                    backgroundColor: 'success.700',
+                  })}
+                />
+                {runningLabel && (
+                  <span className={srOnly}>{`, ${runningLabel}`}</span>
+                )}
+              </>
+            )}
+          </span>
         </Text>
         <Text as="p" variant="smNote" wrap="pretty">
           {description}
@@ -126,9 +156,9 @@ export const Tools = () => {
   const showLintoTool =
     isLintoEnabled && (isLintoActive || lintoEntitlement !== 'no_entitlement')
 
-  // The three tools are exclusive: while one runs, opening the tools lands
-  // straight on ITS panel (the list is one "back" away, the other two tools
-  // keep their "another mode is running" notice). Decided when the panel
+  // While a tool runs, opening the tools lands straight on ITS panel (the list
+  // is one "back" away); with live captions beside a recording, on the
+  // captions, whose panel leads to the recording. Decided when the panel
   // OPENS only — pressing back must show the list, not bounce.
   const metadata = useRoomMetadata()
   const recordingMode = metadata?.recording_mode as string | undefined
@@ -237,6 +267,8 @@ export const Tools = () => {
           }
           onPress={() => openTranscript()}
           dataAttr="tool-transcript"
+          isRunning={recordingActive && recordingMode === 'transcript'}
+          runningLabel={tLinto('running')}
         />
       )}
       {showLintoTool && (
@@ -246,6 +278,8 @@ export const Tools = () => {
           description={tLinto('live.body')}
           onPress={() => openLinto()}
           dataAttr="tool-linto-transcription"
+          isRunning={isLintoActive}
+          runningLabel={tLinto('running')}
         />
       )}
       {isScreenRecordingEnabled && (
@@ -254,6 +288,9 @@ export const Tools = () => {
           title={t('tools.screenRecording.title')}
           description={t('tools.screenRecording.body')}
           onPress={() => openScreenRecording()}
+          dataAttr="tool-screen-recording"
+          isRunning={recordingActive && recordingMode === 'screen_recording'}
+          runningLabel={tLinto('running')}
         />
       )}
     </Div>

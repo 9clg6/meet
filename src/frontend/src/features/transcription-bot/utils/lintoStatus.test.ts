@@ -29,7 +29,26 @@ describe('lintoStatusFromMetadata', () => {
       startedAt: '2026-11-09T10:00:00Z',
       catchUpEnabled: true,
       keepsAudio: true,
+      captionsOnly: false,
     })
+  })
+
+  it('reads a captions-only run', () => {
+    const status = lintoStatusFromMetadata(true, {
+      ...ACTIVE,
+      linto_transcription_captions_only: '1',
+    })
+    expect(status.active).toBe(true)
+    expect(status.captionsOnly).toBe(true)
+  })
+
+  it('a run that published no captions-only key is a run of its own', () => {
+    expect(lintoStatusFromMetadata(true, ACTIVE).captionsOnly).toBe(false)
+    // A stray key without an active status lights nothing.
+    expect(
+      lintoStatusFromMetadata(true, { linto_transcription_captions_only: '1' })
+        .captionsOnly
+    ).toBe(false)
   })
 
   it('a text-only run keeps no audio', () => {

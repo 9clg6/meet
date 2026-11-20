@@ -12,6 +12,8 @@ import { useEffect, useState } from 'react'
 import { useLintoCapabilities } from '@/features/transcription-bot/hooks/useLintoCapabilities'
 import { useLintoConfig } from '@/features/transcription-bot/hooks/useLintoConfig'
 import { useLintoStatus } from '@/features/transcription-bot/hooks/useLintoStatus'
+import { useLiveCaptionsStopper } from '@/features/transcription-bot/hooks/useLiveCaptionsStopper'
+import { LiveCaptionsRow } from '@/features/transcription-bot/components/LiveCaptionsRow'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -90,10 +92,12 @@ export const ScreenRecordingSidePanel = () => {
 
   const room = useRoomContext()
   const { openTranscript, openLinto } = useSidePanel()
-  // A live LinTO transcription owns the room too (its own video option covers
-  // the recording): exclusive with this tool.
-  const { active: isLintoActive } = useLintoStatus()
-  const liveBlocks = isLintoActive && !statuses.isActive
+  // A live LinTO transcription of its own owns the room too (its own video
+  // option covers the recording): exclusive with this tool. Live captions are
+  // not: they run beside the recording, and may outlive it.
+  const { active: isLintoActive, captionsOnly } = useLintoStatus()
+  const liveBlocks = isLintoActive && !captionsOnly && !statuses.isActive
+  const stopCaptions = useLiveCaptionsStopper()
 
   const handleRequestScreenRecording = async () => {
     await notifyParticipants({
@@ -118,7 +122,7 @@ export const ScreenRecordingSidePanel = () => {
         notifyRecordingSaveInProgress(
           RecordingMode.ScreenRecording,
           room.localParticipant,
-          { recipientIsMe: stopped.recipient_is_you === true }
+          { recipientIsMe: stopped.recipient_is_you === true, stopCaptions }
         )
       } else {
         const recordingOptions = {
@@ -295,6 +299,7 @@ export const ScreenRecordingSidePanel = () => {
         anotherModeKey={
           liveBlocks ? 'button.liveStarted' : 'button.anotherModeStarted'
         }
+        runningFooter={<LiveCaptionsRow />}
       />
     </Div>
   )

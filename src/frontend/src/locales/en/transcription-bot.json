@@ -6,7 +6,11 @@
     "stop": "Stop transcribing",
     "notAvailable": "Live transcription is not available in this meeting.",
     "noEntitlement": "Live transcription is not enabled for your account.",
-    "anotherModeStarted": "A recording is in progress. <br/> Stop it before transcribing live.",
+    "captionsOnly": {
+      "heading": "Live captions",
+      "start": "Start captions",
+      "stop": "Stop captions"
+    },
     "options": {
       "catchup": "Catch-up summary",
       "catchupHint": "On arrival, a participant sees a summary of what they missed.",
@@ -57,7 +61,7 @@
     "noEntitlement": "Transcription after the meeting is not enabled for your account."
   },
   "banner": {
-    "inProgress": "Transcription in progress"
+    "inProgress": "Live transcription"
   },
   "stopToast": {
     "ownEmail": "The summary will be sent to <recipient>{{email}}</recipient>",
@@ -78,7 +82,8 @@
     "deferred": {
       "title": "Transcribe after the meeting",
       "body": "Recording transcribed and summarized once the meeting ends."
-    }
+    },
+    "running": "Running"
   },
   "captions": {
     "label": "Captions available",

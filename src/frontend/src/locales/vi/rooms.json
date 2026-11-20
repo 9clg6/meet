@@ -329,7 +329,8 @@
       "admin": "Cài đặt quản trị",
       "tools": "Thêm công cụ",
       "info": "Thông tin cuộc họp",
-      "linto": "Chép lời trực tiếp"
+      "linto": "Chép lời trực tiếp",
+      "lintoCaptions": "Phụ đề trực tiếp"
     },
     "content": {
       "participants": "người tham gia",
@@ -340,7 +341,8 @@
       "admin": "cài đặt quản trị",
       "tools": "thêm công cụ",
       "info": "thông tin cuộc họp",
-      "linto": "chép lời trực tiếp"
+      "linto": "chép lời trực tiếp",
+      "lintoCaptions": "phụ đề trực tiếp"
     },
     "closeButton": "Ẩn {{content}}"
   },

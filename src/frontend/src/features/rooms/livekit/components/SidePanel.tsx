@@ -6,7 +6,8 @@ import { Button, Div } from '@/primitives'
 import { RiArrowLeftLine, RiCloseLine } from '@remixicon/react'
 import { useTranslation } from 'react-i18next'
 import { ParticipantsList } from '@/features/participants/components/ParticipantsList'
-import { PanelId, useSidePanel } from '../hooks/useSidePanel'
+import { PanelId, SubPanelId, useSidePanel } from '../hooks/useSidePanel'
+import { useLintoCaptionsOnly } from '@/features/transcription-bot/hooks/useLintoCaptionsOnly'
 import React, { ReactNode, useCallback, useRef } from 'react'
 import { Chat } from '@/features/chat/components/Chat'
 import { Effects } from './effects/Effects'
@@ -179,7 +180,13 @@ export const SidePanel = () => {
     activeSubPanelId,
   } = useSidePanel()
   const { t } = useTranslation('rooms', { keyPrefix: 'sidePanel' })
-  const title = t(`heading.${activeSubPanelId || activePanelId}`)
+  // The live tool beside a recording only shows captions: its header says so.
+  const lintoCaptionsOnly = useLintoCaptionsOnly()
+  const panelKey =
+    activeSubPanelId === SubPanelId.LINTO && lintoCaptionsOnly
+      ? 'lintoCaptions'
+      : activeSubPanelId || activePanelId
+  const title = t(`heading.${panelKey}`)
 
   const { isOpen: isReactionToolbarOpen } = useReactionsToolbar()
 
@@ -211,7 +218,7 @@ export const SidePanel = () => {
       ariaLabel={t('ariaLabel', { title })}
       onClose={closeSidePanel}
       closeButtonTooltip={t('closeButton', {
-        content: t(`content.${activeSubPanelId || activePanelId}`),
+        content: t(`content.${panelKey}`),
       })}
       escapeHint={t('escapeHint')}
       isClosed={!isSidePanelOpen}

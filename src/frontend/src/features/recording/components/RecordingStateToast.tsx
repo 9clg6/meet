@@ -1,6 +1,6 @@
 import { css } from '@/styled-system/css'
 import { useTranslation } from 'react-i18next'
-import { useMemo, useRef, useEffect } from 'react'
+import { useRef, useEffect } from 'react'
 import { Text } from '@/primitives'
 import {
   RecordingMode,
@@ -10,12 +10,9 @@ import {
 import { FeatureFlags } from '@/features/analytics/enums'
 import { Button as RACButton } from 'react-aria-components'
 import { useSidePanel } from '@/features/rooms/livekit/hooks/useSidePanel'
-import { useRoomMetadata } from '../hooks/useRoomMetadata'
 import { RecordingStatusIcon } from './RecordingStatusIcon'
-import { useIsRecording } from '@livekit/components-react'
 import { useScreenReaderAnnounce } from '@/hooks/useScreenReaderAnnounce'
-import { useLintoStatus } from '@/features/transcription-bot/hooks/useLintoStatus'
-import { resolveRecordingIndicator } from '../utils/recordingIndicator'
+import { useRecordingIndicator } from '../hooks/useRecordingIndicator'
 
 export const RecordingStateToast = () => {
   const { t } = useTranslation('rooms', {
@@ -39,36 +36,15 @@ export const RecordingStateToast = () => {
 
   const {
     isStarted: isScreenRecordingStarted,
-    isStarting: isScreenRecordingStarting,
     isActive: isScreenRecordingActive,
   } = useRecordingStatuses(RecordingMode.ScreenRecording)
 
-  const {
-    isStarted: isTranscriptStarted,
-    isStarting: isTranscriptStarting,
-    isActive: isTranscriptActive,
-  } = useRecordingStatuses(RecordingMode.Transcript)
+  const { isStarted: isTranscriptStarted, isActive: isTranscriptActive } =
+    useRecordingStatuses(RecordingMode.Transcript)
 
   const isStarted = isScreenRecordingStarted || isTranscriptStarted
-  const isStarting = isTranscriptStarting || isScreenRecordingStarting
 
-  const metadata = useRoomMetadata()
-  const isRecording = useIsRecording()
-  // A LinTO live run that keeps the meeting audio shows the same indicator.
-  const { keepsAudio: lintoKeepsAudio } = useLintoStatus()
-
-  const indicator = useMemo(
-    () =>
-      resolveRecordingIndicator({
-        recordingMode: metadata?.recording_mode,
-        recordingStatus: metadata?.recording_status,
-        isStarting,
-        isStarted,
-        isRecording,
-        lintoKeepsAudio,
-      }),
-    [metadata, isStarted, isStarting, isRecording, lintoKeepsAudio]
-  )
+  const indicator = useRecordingIndicator()
   const key = indicator?.key
   const isLintoIndicator = indicator?.source === 'linto'
 

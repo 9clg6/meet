@@ -18,6 +18,8 @@ export interface LintoBotConfig {
   record: boolean
   // Target translation language codes (0..N).
   translations: string[]
+  // Captions only (the meeting is recorded): no add-on, nothing kept.
+  captionsOnly?: boolean
 }
 
 /**
@@ -132,6 +134,10 @@ export const LINTO_METADATA_CATCHUP_KEY = 'linto_transcription_catchup'
 // '1' when the run keeps the meeting audio (the live channel's keepAudio): every
 // participant then sees the recording indicator, '0' for a text-only run.
 export const LINTO_METADATA_KEEP_AUDIO_KEY = 'linto_transcription_keep_audio'
+// '1' when the run only shows captions: started while the meeting is recorded,
+// it keeps nothing (the recording is the meeting's memory).
+export const LINTO_METADATA_CAPTIONS_ONLY_KEY =
+  'linto_transcription_captions_only'
 
 // Segment-id namespace used by the LinTO bot for the transcription segments it
 // publishes into the LiveKit room.

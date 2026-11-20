@@ -67,6 +67,9 @@ export const decodeNotificationDataReceived = (
 export type RecordingDelivery = {
   recipientIsMe: boolean
   shared?: boolean
+  // Live captions still run beside the stopped recording and I may stop
+  // them: the toast offers it.
+  stopCaptions?: () => Promise<void>
 }
 
 export const notifyRecordingSaveInProgress = (
@@ -81,6 +84,7 @@ export const notifyRecordingSaveInProgress = (
       type: NotificationType.RecordingSaving,
       recipientIsMe: delivery?.recipientIsMe === true,
       shared: delivery?.shared === true,
+      stopCaptions: delivery?.stopCaptions,
     },
     { timeout: NotificationDuration.RECORDING_SAVING }
   )

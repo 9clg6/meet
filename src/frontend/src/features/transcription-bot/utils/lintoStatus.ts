@@ -1,4 +1,5 @@
 import {
+  LINTO_METADATA_CAPTIONS_ONLY_KEY,
   LINTO_METADATA_CATCHUP_KEY,
   LINTO_METADATA_CHANNEL_ID_KEY,
   LINTO_METADATA_CHANNEL_INDEX_KEY,
@@ -30,6 +31,9 @@ export interface LintoStatus {
   // recording indicator. Off when the backend published nothing (a text-only
   // run, or one started before the key existed).
   keepsAudio: boolean
+  // The ACTIVE run only shows captions: it keeps nothing, a recording running
+  // beside it is the meeting's memory.
+  captionsOnly: boolean
 }
 
 /**
@@ -55,5 +59,8 @@ export const lintoStatusFromMetadata = (
     keepsAudio:
       active &&
       String(metadata?.[LINTO_METADATA_KEEP_AUDIO_KEY] ?? '0') === '1',
+    captionsOnly:
+      active &&
+      String(metadata?.[LINTO_METADATA_CAPTIONS_ONLY_KEY] ?? '0') === '1',
   }
 }

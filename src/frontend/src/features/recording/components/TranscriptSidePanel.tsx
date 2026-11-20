@@ -40,10 +40,12 @@ import { openSettingsDialog } from '@/stores/settings'
 import { recordingStore } from '@/stores/recording'
 import { captureEvent, reportError } from '@/features/analytics/telemetry'
 import {
+  LiveCaptionsRow,
   SummaryServicePicker,
   useLintoCapabilities,
   useLintoConfig,
   useLintoStatus,
+  useLiveCaptionsStopper,
 } from '@/features/transcription-bot'
 import { useRecordingLanguage } from '../hooks/useRecordingLanguage'
 import { LintoLanguageSelect } from './LintoLanguageSelect'
@@ -78,7 +80,11 @@ export const TranscriptSidePanel = () => {
     async: canTranscribeAsync,
     summary: canSummarize,
   } = useLintoCapabilities()
-  const { active: isLintoActive } = useLintoStatus()
+  // A live run of its own owns the room (exclusive); live captions run beside
+  // the recording, and may outlive it.
+  const { active: isLintoActive, captionsOnly } = useLintoStatus()
+  const liveBlocks = isLintoActive && !captionsOnly
+  const stopCaptions = useLiveCaptionsStopper()
   const { openLinto } = useSidePanel()
   const { lintoSummary, lintoSummaryService, lintoShareSummary } =
     useSnapshot(recordingStore)
@@ -143,6 +149,7 @@ export const TranscriptSidePanel = () => {
           {
             recipientIsMe: stopped.recipient_is_you === true,
             shared: stopped.share_summary === true,
+            stopCaptions,
           }
         )
       } else {
@@ -417,21 +424,22 @@ export const TranscriptSidePanel = () => {
         handle={handleTranscript}
         statuses={{
           ...statuses,
-          // A live LinTO transcription owns the room too: exclusive.
+          // A live LinTO transcription of its own owns the room too:
+          // exclusive. Live captions are not: they run beside.
           isAnotherModeStarted:
-            statuses.isAnotherModeStarted ||
-            (isLintoActive && !statuses.isActive),
+            statuses.isAnotherModeStarted || (liveBlocks && !statuses.isActive),
         }}
         isPendingToStart={isPendingToStart}
         isPendingToStop={isPendingToStop}
         openSidePanel={
-          isLintoActive && !statuses.isActive ? openLinto : openScreenRecording
+          liveBlocks && !statuses.isActive ? openLinto : openScreenRecording
         }
         anotherModeKey={
-          isLintoActive && !statuses.isActive
+          liveBlocks && !statuses.isActive
             ? 'button.liveStarted'
             : 'button.anotherModeStarted'
         }
+        runningFooter={<LiveCaptionsRow />}
       />
     </Div>
   )

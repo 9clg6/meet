@@ -32,6 +32,9 @@ type LintoState = {
   // True once I started the bot in this session. Set in the start onSuccess and
   // deliberately NOT reset on stop: a starter may still stop a shared run.
   startedByMe: boolean
+  // The running run only shows captions (it started while the meeting was
+  // recorded): mirrors the room metadata, set optimistically by the start.
+  captionsOnly: boolean
   // Epoch ms until which the shared-state sync must NOT overwrite the store: a
   // guard against a stale bot-status / metadata roundtrip clobbering optimistic
   // local start/stop state.
@@ -78,6 +81,7 @@ export const lintoStore = proxy<LintoState>({
   running: false,
   userId: undefined,
   startedByMe: false,
+  captionsOnly: false,
   localActionUntil: 0,
   catchup: true,
   summary: true,
@@ -96,6 +100,7 @@ export const lintoStore = proxy<LintoState>({
 export const resetLintoRun = () => {
   lintoStore.running = false
   lintoStore.userId = undefined
+  lintoStore.captionsOnly = false
   // The catch-up belongs to the run that just ended: a next run starts from a
   // blank journal (clearTranscript) and must not show the previous summary.
   lintoStore.joinedAt = null

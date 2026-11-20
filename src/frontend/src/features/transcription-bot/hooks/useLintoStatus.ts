@@ -29,7 +29,7 @@ export const useLintoStatus = (): LintoStatus => {
  * clobbering the optimistic state. Mount once (LintoProvider).
  */
 export const useSyncLintoStatus = () => {
-  const { active, startedBy } = useLintoStatus()
+  const { active, startedBy, captionsOnly } = useLintoStatus()
   const { user } = useUser()
   const currentUserId = user?.id
 
@@ -37,6 +37,7 @@ export const useSyncLintoStatus = () => {
     if (Date.now() < lintoStore.localActionUntil) return
     if (active) {
       if (!lintoStore.running) lintoStore.running = true
+      lintoStore.captionsOnly = captionsOnly
       if (startedBy) {
         lintoStore.userId = startedBy
         // Never downgrade a locally-set `startedByMe`; only promote on a match.
@@ -47,5 +48,5 @@ export const useSyncLintoStatus = () => {
     } else if (lintoStore.running) {
       resetLintoRun()
     }
-  }, [active, startedBy, currentUserId])
+  }, [active, startedBy, captionsOnly, currentUserId])
 }

@@ -436,7 +436,8 @@
       "admin": "Admin-Einstellungen",
       "tools": "Weitere Tools",
       "info": "Meeting-Informationen",
-      "linto": "Live transkribieren"
+      "linto": "Live transkribieren",
+      "lintoCaptions": "Live-Untertitel"
     },
     "content": {
       "participants": "Teilnehmende",
@@ -447,7 +448,8 @@
       "admin": "Admin-Einstellungen",
       "tools": "Weitere Tools",
       "info": "Meeting-Informationen",
-      "linto": "die Live-Transkription"
+      "linto": "die Live-Transkription",
+      "lintoCaptions": "die Live-Untertitel"
     },
     "closeButton": "{{content}} ausblenden (Escape)",
     "escapeHint": "Escape drücken zum Schließen"

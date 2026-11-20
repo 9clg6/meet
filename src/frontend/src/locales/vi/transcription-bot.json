@@ -6,7 +6,11 @@
     "stop": "Dừng chép lời",
     "notAvailable": "Chép lời trực tiếp không khả dụng trong cuộc họp này.",
     "noEntitlement": "Chép lời trực tiếp chưa được bật cho tài khoản của bạn.",
-    "anotherModeStarted": "Đang có một bản ghi. <br/> Hãy dừng nó trước khi chép lời trực tiếp.",
+    "captionsOnly": {
+      "heading": "Phụ đề trực tiếp",
+      "start": "Bật phụ đề",
+      "stop": "Tắt phụ đề"
+    },
     "options": {
       "catchup": "Tóm tắt phần đã bỏ lỡ",
       "catchupHint": "Khi vào, người tham gia thấy tóm tắt những gì đã bỏ lỡ.",
@@ -57,7 +61,7 @@
     "noEntitlement": "Chép lời sau cuộc họp chưa được bật cho tài khoản của bạn."
   },
   "banner": {
-    "inProgress": "Đang chép lời"
+    "inProgress": "Chép lời trực tiếp"
   },
   "stopToast": {
     "ownEmail": "Biên bản sẽ được gửi cho bạn tại <recipient>{{email}}</recipient>",
@@ -78,7 +82,8 @@
     "deferred": {
       "title": "Chép lời sau cuộc họp",
       "body": "Bản ghi được chép lời và tóm tắt sau khi cuộc họp kết thúc."
-    }
+    },
+    "running": "Đang chạy"
   },
   "captions": {
     "label": "Có phụ đề",

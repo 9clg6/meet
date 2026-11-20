@@ -436,7 +436,8 @@
       "admin": "Host settings",
       "tools": "More tools",
       "info": "Meeting information",
-      "linto": "Transcribe live"
+      "linto": "Transcribe live",
+      "lintoCaptions": "Live captions"
     },
     "content": {
       "participants": "participants",
@@ -447,7 +448,8 @@
       "admin": "host settings",
       "tools": "more tools",
       "info": "meeting information",
-      "linto": "live transcription"
+      "linto": "live transcription",
+      "lintoCaptions": "live captions"
     },
     "closeButton": "Hide {{content}} (Escape)",
     "escapeHint": "Press Escape to close"

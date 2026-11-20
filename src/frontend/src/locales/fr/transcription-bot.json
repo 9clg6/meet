@@ -6,7 +6,11 @@
     "stop": "Arrêter la transcription",
     "notAvailable": "La transcription en direct n'est pas disponible dans cette réunion.",
     "noEntitlement": "La transcription en direct n'est pas activée pour votre compte.",
-    "anotherModeStarted": "Un enregistrement est en cours. <br/> Arrêtez-le avant de transcrire en direct.",
+    "captionsOnly": {
+      "heading": "Sous-titres en direct",
+      "start": "Démarrer les sous-titres",
+      "stop": "Arrêter les sous-titres"
+    },
     "options": {
       "catchup": "Résumé de rattrapage",
       "catchupHint": "À son arrivée, un participant voit un résumé de ce qu'il a manqué.",
@@ -57,7 +61,7 @@
     "noEntitlement": "La transcription après la réunion n'est pas activée pour votre compte."
   },
   "banner": {
-    "inProgress": "Transcription en cours"
+    "inProgress": "Transcription en direct"
   },
   "stopToast": {
     "ownEmail": "Le compte rendu vous sera envoyé à <recipient>{{email}}</recipient>",
@@ -78,7 +82,8 @@
     "deferred": {
       "title": "Transcrire après la réunion",
       "body": "Enregistrement transcrit et compte rendu une fois la réunion terminée."
-    }
+    },
+    "running": "En cours"
   },
   "captions": {
     "label": "Sous-titres disponibles",

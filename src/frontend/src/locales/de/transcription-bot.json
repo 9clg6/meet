@@ -6,7 +6,11 @@
     "stop": "Transkription beenden",
     "notAvailable": "Die Live-Transkription ist in diesem Meeting nicht verfügbar.",
     "noEntitlement": "Die Live-Transkription ist für dein Konto nicht aktiviert.",
-    "anotherModeStarted": "Eine Aufnahme läuft. <br/> Stoppe sie, bevor du live transkribierst.",
+    "captionsOnly": {
+      "heading": "Live-Untertitel",
+      "start": "Untertitel starten",
+      "stop": "Untertitel beenden"
+    },
     "options": {
       "catchup": "Nachhol-Zusammenfassung",
       "catchupHint": "Wer eintrifft, sieht eine Zusammenfassung des Verpassten.",
@@ -57,7 +61,7 @@
     "noEntitlement": "Die Transkription nach dem Meeting ist für dein Konto nicht aktiviert."
   },
   "banner": {
-    "inProgress": "Transkription läuft"
+    "inProgress": "Live-Transkription"
   },
   "stopToast": {
     "ownEmail": "Das Protokoll wird dir an <recipient>{{email}}</recipient> gesendet",
@@ -78,7 +82,8 @@
     "deferred": {
       "title": "Nach dem Meeting transkribieren",
       "body": "Aufnahme, die nach dem Meeting transkribiert und zusammengefasst wird."
-    }
+    },
+    "running": "Läuft"
   },
   "captions": {
     "label": "Untertitel verfügbar",

@@ -132,12 +132,15 @@ export function useLintoTranscriptionLanguages(
 
 export interface LintoRunState {
   status: string
+  captions_only?: boolean
   session_id?: string
   user_id?: string | null
 }
 
 export interface LintoStopState {
   status: string
+  // A captions-only run delivers nothing.
+  captions_only?: boolean
   summary?: boolean
   share_summary?: boolean
   recipient_is_you?: boolean
@@ -164,6 +167,7 @@ const startLintoLive = ({
       share_summary: config.summary && config.shareSummary,
       record: config.record,
       catchup: config.catchup,
+      captions_only: config.captionsOnly === true,
     }),
   })
 
@@ -172,7 +176,7 @@ export interface StopLintoLiveParams {
   token: string
 }
 
-const stopLintoLive = ({
+export const stopLintoLive = ({
   roomId,
   token,
 }: StopLintoLiveParams): Promise<LintoStopState> =>

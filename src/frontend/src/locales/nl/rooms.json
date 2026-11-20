@@ -436,7 +436,8 @@
       "admin": "Beheerdersbediening",
       "tools": "Meer tools",
       "info": "Vergaderinformatie",
-      "linto": "Live transcriberen"
+      "linto": "Live transcriberen",
+      "lintoCaptions": "Live ondertiteling"
     },
     "content": {
       "participants": "deelnemers",
@@ -447,7 +448,8 @@
       "admin": "beheerdersbediening",
       "tools": "meer tools",
       "info": "vergaderinformatie",
-      "linto": "de live transcriptie"
+      "linto": "de live transcriptie",
+      "lintoCaptions": "de live ondertiteling"
     },
     "closeButton": "Verberg {{content}} (Escape)",
     "escapeHint": "Druk op Escape om te sluiten"
