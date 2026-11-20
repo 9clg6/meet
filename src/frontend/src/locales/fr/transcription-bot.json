@@ -48,6 +48,20 @@
       "unavailable": "Le service de rattrapage n'est pas disponible.",
       "close": "Fermer le résumé",
       "joined": "Vous avez rejoint la réunion à {{time}}"
+    },
+    "audioCatchup": {
+      "step": {
+        "sending": "Envoi de l'audio de la réunion…",
+        "transcribing": "Transcription de ce que vous avez manqué…",
+        "summarizing": "Rédaction du résumé…"
+      },
+      "progress": "Avancement du résumé",
+      "etaUnderMinute": "moins d'une minute",
+      "etaMinutes_one": "environ {{count}} minute",
+      "etaMinutes_other": "environ {{count}} minutes",
+      "etaRange": "environ {{min}} à {{max}} minutes",
+      "coveredUntil": "Couvre la réunion jusqu'à {{time}}",
+      "tooShort": "Trop peu de paroles avant votre arrivée pour en faire un résumé."
     }
   },
   "deferred": {
@@ -58,7 +72,9 @@
     "summary": "Compte rendu à la fin de la réunion",
     "shareSummary": "Partager avec les participants",
     "record": "Enregistrer aussi la vidéo",
-    "noEntitlement": "La transcription après la réunion n'est pas activée pour votre compte."
+    "noEntitlement": "La transcription après la réunion n'est pas activée pour votre compte.",
+    "catchup": "Résumé de rattrapage",
+    "catchupHint": "À son arrivée, un participant voit un résumé de ce qu'il a manqué."
   },
   "banner": {
     "inProgress": "Transcription en direct"
@@ -72,7 +88,7 @@
   },
   "catchupToast": {
     "body": "Le résumé de ce qui s'est dit avant votre arrivée est prêt.",
-    "open": "Ouvrir la transcription"
+    "open": "Ouvrir le résumé"
   },
   "tools": {
     "live": {

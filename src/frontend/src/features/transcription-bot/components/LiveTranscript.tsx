@@ -1,6 +1,5 @@
 import { css } from '@/styled-system/css'
-import { RiCloseLine } from '@remixicon/react'
-import { Button, Text } from '@/primitives'
+import { Text } from '@/primitives'
 import {
   Fragment,
   useCallback,
@@ -14,11 +13,9 @@ import { useTranslation } from 'react-i18next'
 import { useSnapshot } from 'valtio'
 import { transcriptStore } from '../store/transcriptStore'
 import { lintoStore } from '../store/lintoStore'
-import { dismissLintoCatchUp } from '../hooks/useLintoCatchUp'
 import { LintoCaption } from '../types/linto'
 import { baseCode, languageName, ORIGINAL } from '../utils/languageLabel'
 import { useLintoDisplayLanguages } from '../hooks/useLintoDisplayLanguages'
-import { SimpleMarkdown } from './SimpleMarkdown'
 
 // Find the translation for a (base) language inside an entry, tolerant of region
 // tags on the stored keys.
@@ -71,7 +68,7 @@ export const LiveTranscript = () => {
   const { t, i18n } = useTranslation('transcription-bot', {
     keyPrefix: 'lintoBot',
   })
-  const { startedByMe, joinedAt, catchUp } = useSnapshot(lintoStore)
+  const { startedByMe, joinedAt } = useSnapshot(lintoStore)
   const { byId, order } = useSnapshot(transcriptStore)
   const {
     languages: availableLangs,
@@ -155,18 +152,7 @@ export const LiveTranscript = () => {
 
   // Catch-up: everything said BEFORE I joined is history, shown dimmed above a
   // "you joined at HH:MM" divider. The starter saw it all and gets neither.
-  // The summary block shows while there is (or will be) something to read, or
-  // to say that the catch-up service is unavailable: nothing at all when the
-  // run has no summary, when too little was said, when the LLM failed, or once
-  // the reader closed it.
-  const showCatchUp =
-    !startedByMe &&
-    joinedAt !== null &&
-    !catchUp.dismissed &&
-    (catchUp.status === 'loading' ||
-      catchUp.status === 'streaming' ||
-      catchUp.status === 'unavailable' ||
-      (catchUp.status === 'done' && !!catchUp.text.trim()))
+  // The summary of that history shows on top of the Tools panel (CatchUpBlock).
   // The divider sits right before the first line received live (or at the tail
   // when the whole journal is still history).
   const markerIndex = useMemo(() => {
@@ -345,61 +331,6 @@ export const LiveTranscript = () => {
             ))}
           </select>
         </label>
-      )}
-
-      {showCatchUp && (
-        <div
-          data-testid="linto-catchup"
-          data-status={catchUp.status}
-          className={css({
-            width: '100%',
-            padding: '0.625rem 0.75rem',
-            borderRadius: '4px',
-            border: '1px solid',
-            borderColor: 'control.border',
-            backgroundColor: 'greyscale.50',
-            flexShrink: 0,
-            maxHeight: '40%',
-            overflowY: 'auto',
-          })}
-        >
-          <div
-            className={css({
-              display: 'flex',
-              alignItems: 'baseline',
-              justifyContent: 'space-between',
-              gap: '0.5rem',
-            })}
-          >
-            <Text
-              variant="sm"
-              as="p"
-              className={css({ fontWeight: 'semibold', color: 'primary.700' })}
-            >
-              {t('catchup.heading')}
-            </Text>
-            <Button
-              variant="text"
-              size="sm"
-              data-testid="linto-catchup-close"
-              aria-label={t('catchup.close')}
-              onPress={() => dismissLintoCatchUp()}
-            >
-              <RiCloseLine size={16} aria-hidden="true" />
-            </Button>
-          </div>
-          <div data-testid="linto-catchup-summary">
-            {catchUp.status === 'unavailable' ? (
-              <Text variant="smNote" data-testid="linto-catchup-unavailable">
-                {t('catchup.unavailable')}
-              </Text>
-            ) : catchUp.text ? (
-              <SimpleMarkdown text={catchUp.text} />
-            ) : (
-              <Text variant="smNote">{t('catchup.loading')}</Text>
-            )}
-          </div>
-        </div>
       )}
 
       {entries.length === 0 ? (

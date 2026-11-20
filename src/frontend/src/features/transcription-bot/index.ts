@@ -6,6 +6,7 @@ export { TranslationPicker } from './components/TranslationPicker'
 export { LintoBanner } from './components/LintoBanner'
 export { LintoProvider } from './components/LintoProvider'
 export { LiveCaptionsRow } from './components/LiveCaptionsRow'
+export { CatchUpBlock } from './components/CatchUpBlock'
 
 // hooks
 export { useLintoConfig } from './hooks/useLintoConfig'

@@ -11,9 +11,10 @@ import { StyledToastContainer } from './StyledToastContainer'
 
 /**
  * "What was said before you arrived is ready" toast (fork, calque of
- * ToastMessageReceived): a discreet, pressable notice for a late joiner whose
- * live transcription panel is closed. Pressing it opens the panel; it closes
- * by itself as soon as the panel shows.
+ * ToastMessageReceived), whatever the brief's source: for a late joiner whose
+ * Tools panel did not open by itself (another panel was open, they closed it,
+ * or a phone). Pressing it opens the Tools panel the brief tops; it closes by
+ * itself as soon as that panel shows.
  */
 export function ToastLintoCatchUp({ state, ...props }: Readonly<ToastProps>) {
   const { t } = useTranslation('transcription-bot', {
@@ -22,15 +23,15 @@ export function ToastLintoCatchUp({ state, ...props }: Readonly<ToastProps>) {
   const ref = useRef(null)
   const { toastProps } = useToast(props, state, ref)
   const toast = props.toast
-  const { isLintoOpen } = useSidePanel()
+  const { isToolsOpen } = useSidePanel()
   const onOpen =
     typeof toast.content.onOpen === 'function' ? toast.content.onOpen : null
 
   useEffect(() => {
-    if (isLintoOpen) state.close(toast.key)
-  }, [isLintoOpen, toast, state])
+    if (isToolsOpen) state.close(toast.key)
+  }, [isToolsOpen, toast, state])
 
-  if (isLintoOpen) return null
+  if (isToolsOpen) return null
 
   return (
     <StyledToastContainer {...toastProps} ref={ref}>

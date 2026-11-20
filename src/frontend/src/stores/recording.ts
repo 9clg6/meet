@@ -23,6 +23,8 @@ type State = {
   lintoSummaryService?: string
   // The summary also goes to the signed-in participants (default OFF).
   lintoShareSummary: boolean
+  // A late joiner gets a brief of what was said before (default ON).
+  lintoCatchup: boolean
 }
 
 export const recordingStore = proxy<State>({
@@ -32,4 +34,5 @@ export const recordingStore = proxy<State>({
   lintoSummary: true,
   lintoSummaryService: undefined,
   lintoShareSummary: false,
+  lintoCatchup: true,
 })

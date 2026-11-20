@@ -48,6 +48,20 @@
       "unavailable": "The catch-up service is not available.",
       "close": "Close the summary",
       "joined": "You joined the meeting at {{time}}"
+    },
+    "audioCatchup": {
+      "step": {
+        "sending": "Sending the meeting's audio…",
+        "transcribing": "Transcribing what you missed…",
+        "summarizing": "Writing the summary…"
+      },
+      "progress": "Summary progress",
+      "etaUnderMinute": "under a minute",
+      "etaMinutes_one": "about {{count}} minute",
+      "etaMinutes_other": "about {{count}} minutes",
+      "etaRange": "about {{min}} to {{max}} minutes",
+      "coveredUntil": "Covers the meeting until {{time}}",
+      "tooShort": "Too little was said before you arrived to summarize."
     }
   },
   "deferred": {
@@ -58,7 +72,9 @@
     "summary": "Summary at the end of the meeting",
     "shareSummary": "Share with the participants",
     "record": "Also record the video",
-    "noEntitlement": "Transcription after the meeting is not enabled for your account."
+    "noEntitlement": "Transcription after the meeting is not enabled for your account.",
+    "catchup": "Catch-up summary",
+    "catchupHint": "On arrival, a participant sees a summary of what they missed."
   },
   "banner": {
     "inProgress": "Live transcription"
@@ -72,7 +88,7 @@
   },
   "catchupToast": {
     "body": "The summary of what was said before you arrived is ready.",
-    "open": "Open the transcript"
+    "open": "Open the summary"
   },
   "tools": {
     "live": {

@@ -15,6 +15,7 @@ import {
 import { useConfig } from '@/api/useConfig'
 import { useRoomMetadata } from '@/features/recording/hooks/useRoomMetadata'
 import {
+  CatchUpBlock,
   LintoSidePanel,
   useLintoConfig,
   useLintoEntitlement,
@@ -133,6 +134,22 @@ const ToolButton = ({
   )
 }
 
+// The "before you arrived" brief tops every tool view, whatever its source (a
+// live run or the recording's audio): the panel opens by itself at a late
+// arrival on the running tool's view, and a guest has no LinTO entry.
+const WithCatchUp = ({ children }: { children: ReactNode }) => (
+  <Div
+    display="flex"
+    flexDirection="column"
+    flexGrow={1}
+    minHeight={0}
+    width="100%"
+  >
+    <CatchUpBlock />
+    {children}
+  </Div>
+)
+
 export const Tools = () => {
   const { data } = useConfig()
   const {
@@ -206,93 +223,107 @@ export const Tools = () => {
 
   switch (activeSubPanelId) {
     case SubPanelId.TRANSCRIPT:
-      return <TranscriptSidePanel />
+      return (
+        <WithCatchUp>
+          <TranscriptSidePanel />
+        </WithCatchUp>
+      )
     case SubPanelId.SCREEN_RECORDING:
-      return <ScreenRecordingSidePanel />
+      return (
+        <WithCatchUp>
+          <ScreenRecordingSidePanel />
+        </WithCatchUp>
+      )
     case SubPanelId.LINTO:
-      return <LintoSidePanel />
+      return (
+        <WithCatchUp>
+          <LintoSidePanel />
+        </WithCatchUp>
+      )
     default:
       break
   }
 
   return (
-    <Div
-      display="flex"
-      overflowY="scroll"
-      padding="0 0.75rem"
-      flexGrow={1}
-      flexDirection="column"
-      alignItems="start"
-      gap={0.5}
-    >
-      <Text
-        variant="note"
-        wrap="balance"
-        className={css({
-          textStyle: 'sm',
-          paddingX: '0.75rem',
-          paddingTop: '0.25rem',
-          marginBottom: '1rem',
-        })}
+    <WithCatchUp>
+      <Div
+        display="flex"
+        overflowY="scroll"
+        padding="0 0.75rem"
+        flexGrow={1}
+        flexDirection="column"
+        alignItems="start"
+        gap={0.5}
       >
-        {t('body')}{' '}
-        {data?.support?.help_article_more_tools && (
-          <A
-            href={data.support.help_article_more_tools}
-            target="_blank"
-            rel="noopener noreferrer"
-            externalIcon
-            color="note"
-            aria-label={t('linkAriaLabel')}
-          >
-            {t('moreLink')}
-          </A>
-        )}
-      </Text>
-      {/* Two distinct transcription tools: the live one (LinTO bot in the
+        <Text
+          variant="note"
+          wrap="balance"
+          className={css({
+            textStyle: 'sm',
+            paddingX: '0.75rem',
+            paddingTop: '0.25rem',
+            marginBottom: '1rem',
+          })}
+        >
+          {t('body')}{' '}
+          {data?.support?.help_article_more_tools && (
+            <A
+              href={data.support.help_article_more_tools}
+              target="_blank"
+              rel="noopener noreferrer"
+              externalIcon
+              color="note"
+              aria-label={t('linkAriaLabel')}
+            >
+              {t('moreLink')}
+            </A>
+          )}
+        </Text>
+        {/* Two distinct transcription tools: the live one (LinTO bot in the
           room: captions, translation, summaries) and the deferred one (the
           meeting is recorded, transcribed once it ends). */}
-      {isTranscriptEnabled && (
-        <ToolButton
-          icon={<Icon name="speech_to_text" />}
-          title={
-            isLintoEnabled
-              ? tLinto('deferred.title')
-              : t('tools.transcript.title')
-          }
-          description={
-            isLintoEnabled
-              ? tLinto('deferred.body')
-              : t('tools.transcript.body')
-          }
-          onPress={() => openTranscript()}
-          dataAttr="tool-transcript"
-          isRunning={recordingActive && recordingMode === 'transcript'}
-          runningLabel={tLinto('running')}
-        />
-      )}
-      {showLintoTool && (
-        <ToolButton
-          icon={<Icon name="speech_to_text" />}
-          title={tLinto('live.title')}
-          description={tLinto('live.body')}
-          onPress={() => openLinto()}
-          dataAttr="tool-linto-transcription"
-          isRunning={isLintoActive}
-          runningLabel={tLinto('running')}
-        />
-      )}
-      {isScreenRecordingEnabled && (
-        <ToolButton
-          icon={<Icon name="mode_standby" />}
-          title={t('tools.screenRecording.title')}
-          description={t('tools.screenRecording.body')}
-          onPress={() => openScreenRecording()}
-          dataAttr="tool-screen-recording"
-          isRunning={recordingActive && recordingMode === 'screen_recording'}
-          runningLabel={tLinto('running')}
-        />
-      )}
-    </Div>
+        {isTranscriptEnabled && (
+          <ToolButton
+            icon={<Icon name="speech_to_text" />}
+            title={
+              isLintoEnabled
+                ? tLinto('deferred.title')
+                : t('tools.transcript.title')
+            }
+            description={
+              isLintoEnabled
+                ? tLinto('deferred.body')
+                : t('tools.transcript.body')
+            }
+            onPress={() => openTranscript()}
+            dataAttr="tool-transcript"
+            isRunning={recordingActive && recordingMode === 'transcript'}
+            runningLabel={tLinto('running')}
+          />
+        )}
+        {showLintoTool && (
+          <ToolButton
+            icon={<Icon name="speech_to_text" />}
+            title={tLinto('live.title')}
+            description={tLinto('live.body')}
+            onPress={() => openLinto()}
+            dataAttr="tool-linto-transcription"
+            isRunning={isLintoActive}
+            runningLabel={tLinto('running')}
+          />
+        )}
+        {isScreenRecordingEnabled && (
+          <ToolButton
+            icon={<Icon name="mode_standby" />}
+            title={t('tools.screenRecording.title')}
+            description={t('tools.screenRecording.body')}
+            onPress={() => openScreenRecording()}
+            dataAttr="tool-screen-recording"
+            isRunning={recordingActive && recordingMode === 'screen_recording'}
+            runningLabel={tLinto('running')}
+          />
+        )}
+      </Div>
+    </WithCatchUp>
   )
 }

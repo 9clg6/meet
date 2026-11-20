@@ -24,6 +24,10 @@ export interface LintoRuntimeConfig {
   default_profile_id: string
   // Most translation languages a live run may carry, 0 = no limit.
   live_max_translations: number
+  // Late joiners' brief from a recording's audio: the recording option is
+  // offered when on. The late threshold is shared with the live catch-up.
+  catchup_enabled?: boolean
+  catchup_late_threshold_s?: number
 }
 
 export interface ApiConfig {

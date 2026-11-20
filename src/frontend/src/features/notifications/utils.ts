@@ -121,9 +121,10 @@ export const notifyLintoSummarySaving = ({
 }
 
 /**
- * LinTO "what was said before you arrived is ready" toast (fork): shown to a
- * late joiner whose panel is closed when the catch-up summary lands. Pressing
- * it opens the live transcription panel (`open`); it goes away by itself.
+ * LinTO "what was said before you arrived is ready" toast (fork), whatever the
+ * brief's source: shown to a late joiner whose Tools panel did not open by
+ * itself when the brief lands. Pressing it opens the panel (`open`); it goes
+ * away by itself.
  */
 export const notifyLintoCatchUpReady = (open: () => void) => {
   toastQueue.add(

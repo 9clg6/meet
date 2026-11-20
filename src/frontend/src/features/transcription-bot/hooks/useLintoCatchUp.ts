@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useRoomContext } from '@livekit/components-react'
 import { useSnapshot } from 'valtio'
 import { useConfig } from '@/api/useConfig'
+import { useIsMobile } from '@/utils/useIsMobile'
 import { useRoomData } from '@/features/rooms/livekit/hooks/useRoomData'
 import { useSidePanel } from '@/features/rooms/livekit/hooks/useSidePanel'
 import { notifyLintoCatchUpReady } from '@/features/notifications'
@@ -17,6 +18,8 @@ import { LINTO_SEGMENT_PREFIX, LintoCaption } from '../types/linto'
 import LinTO from '../vendor/linto-sdk'
 import type { PublicSession } from '../vendor/linto-sdk'
 import { useLintoStatus } from './useLintoStatus'
+import { DEFAULT_LATE_THRESHOLD_S } from './useLintoConfig'
+import { isLateArrival } from '../utils/catchUpView'
 
 /**
  * "Catch-up" for a participant who joins while the transcription already runs.
@@ -28,7 +31,9 @@ import { useLintoStatus } from './useLintoStatus'
  * everything said BEFORE the local join time.
  *
  * It runs ONCE per (room, session), and never for the starter — who has seen
- * the whole meeting and needs neither the history nor the summary.
+ * the whole meeting and needs neither the history nor the summary. The summary
+ * is for a late joiner only (the threshold the recording's brief uses too):
+ * the side panel then opens by itself, the brief on top of the Tools panel.
  */
 
 // The history comes from Studio's public session route, without credential;
@@ -155,11 +160,19 @@ export const useLintoCatchUp = () => {
   // Read through refs: `useSidePanel` hands out new function identities on
   // every render, and the hydration effect below must NOT re-run (its cleanup
   // cancels the fetch in flight) for that.
-  const { isLintoOpen, openLinto } = useSidePanel()
-  const isLintoOpenRef = useRef(isLintoOpen)
-  isLintoOpenRef.current = isLintoOpen
+  const { isToolsOpen, isSidePanelOpen, openLinto } = useSidePanel()
+  const isMobile = useIsMobile()
+  const isToolsOpenRef = useRef(isToolsOpen)
+  isToolsOpenRef.current = isToolsOpen
   const openLintoRef = useRef(openLinto)
   openLintoRef.current = openLinto
+  // The panel opens by itself, never over another one nor on a phone.
+  const mayOpenPanelRef = useRef(false)
+  mayOpenPanelRef.current = !isSidePanelOpen && !isMobile
+  const lateThresholdS =
+    apiConfig?.linto?.catchup_late_threshold_s ?? DEFAULT_LATE_THRESHOLD_S
+  const lateThresholdRef = useRef(lateThresholdS)
+  lateThresholdRef.current = lateThresholdS
 
   const roomId = apiRoomData?.livekit?.room || room?.name || ''
   const roomTokenRef = useRef('')
@@ -178,7 +191,7 @@ export const useLintoCatchUp = () => {
 
   /** Stream the "before you arrived" summary into the store. It is computed
    *  ONCE per run: no refresh, and the block can be closed for good. When it
-   *  lands while the panel is closed, a discreet toast offers to open it. */
+   *  lands while the Tools panel is closed, a discreet toast offers it. */
   const runSummary = useCallback(
     async (meetRoomId: string, token: string, joinedAt: number) => {
       abortRef.current?.abort()
@@ -224,7 +237,7 @@ export const useLintoCatchUp = () => {
           updatedAt: Date.now(),
           dismissed: false,
         }
-        if (text.trim() && !isLintoOpenRef.current) {
+        if (text.trim() && !isToolsOpenRef.current) {
           notifyLintoCatchUpReady(() => openLintoRef.current())
         }
       } catch (err) {
@@ -288,8 +301,16 @@ export const useLintoCatchUp = () => {
         mapSessionCaptions(session, sessionId, channelIndex, joinedAt, baseTime)
       )
       // The summary is an option of the run: the history above is always
-      // hydrated, the LLM is only asked when the starter left it on.
+      // hydrated, the LLM is only asked when the starter left it on, and for
+      // a late joiner only.
       if (!catchUpEnabled) return
+      const runStart = Date.parse(startedAt || '')
+      if (
+        Number.isFinite(runStart) &&
+        !isLateArrival(joinedAt, runStart, lateThresholdRef.current)
+      ) {
+        return
+      }
       const token = roomTokenRef.current
       if (!token) {
         console.warn(
@@ -302,6 +323,7 @@ export const useLintoCatchUp = () => {
         }
         return
       }
+      if (mayOpenPanelRef.current) openLintoRef.current()
       await runSummary(roomId, token, joinedAt)
     }
     void run()

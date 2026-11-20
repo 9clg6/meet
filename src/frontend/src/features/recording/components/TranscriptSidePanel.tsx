@@ -74,7 +74,7 @@ export const TranscriptSidePanel = () => {
 
   // LinTO (fork): the deferred transcription is a LinTO feature with its own
   // language list, summary options and per-user capability.
-  const { enabled: isLintoEnabled } = useLintoConfig()
+  const { enabled: isLintoEnabled, catchupEnabled } = useLintoConfig()
   const {
     loading: capabilitiesLoading,
     async: canTranscribeAsync,
@@ -86,8 +86,11 @@ export const TranscriptSidePanel = () => {
   const liveBlocks = isLintoActive && !captionsOnly
   const stopCaptions = useLiveCaptionsStopper()
   const { openLinto } = useSidePanel()
-  const { lintoSummary, lintoSummaryService, lintoShareSummary } =
+  const { lintoSummary, lintoSummaryService, lintoShareSummary, lintoCatchup } =
     useSnapshot(recordingStore)
+  // The late joiners' brief from the recording's audio: an LLM summary, so the
+  // summary capability gates it, like the live tool's option.
+  const canCatchUp = isLintoEnabled && catchupEnabled && canSummarize
 
   const hasTranscriptAccess = useHasRecordingAccess(
     RecordingMode.Transcript,
@@ -179,6 +182,7 @@ export const TranscriptSidePanel = () => {
               lintoShareSummary && {
                 share_summary: true,
               }),
+            ...(canCatchUp && { catchup: lintoCatchup }),
           }),
           collect_metadata: isMetadataCollectorEnabled,
         }
@@ -394,6 +398,30 @@ export const TranscriptSidePanel = () => {
                     </Checkbox>
                   </>
                 )}
+              </>
+            )}
+            {canCatchUp && (
+              <>
+                <Checkbox
+                  size="sm"
+                  data-testid="transcript-mode-catchup"
+                  isSelected={lintoCatchup}
+                  onChange={(value) => {
+                    recordingStore.lintoCatchup = value
+                  }}
+                  isDisabled={controlsDisabled}
+                >
+                  <Text variant="sm">{tLinto('catchup')}</Text>
+                </Checkbox>
+                <Text
+                  variant="smNote"
+                  className={css({
+                    paddingLeft: '1.625rem',
+                    marginTop: '-0.5rem',
+                  })}
+                >
+                  {tLinto('catchupHint')}
+                </Text>
               </>
             )}
           </VStack>

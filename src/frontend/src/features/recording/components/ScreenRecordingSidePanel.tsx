@@ -15,6 +15,7 @@ import { useLintoStatus } from '@/features/transcription-bot/hooks/useLintoStatu
 import { useLiveCaptionsStopper } from '@/features/transcription-bot/hooks/useLiveCaptionsStopper'
 import { LiveCaptionsRow } from '@/features/transcription-bot/components/LiveCaptionsRow'
 import { useTranslation } from 'react-i18next'
+import { useSnapshot } from 'valtio'
 
 import {
   NotificationType,
@@ -33,6 +34,7 @@ import { useRecordingEncoding } from '../hooks/useRecordingEncoding'
 import { useRecordingLanguage } from '../hooks/useRecordingLanguage'
 import { LintoLanguageSelect } from './LintoLanguageSelect'
 import { openSettingsDialog } from '@/stores/settings'
+import { recordingStore } from '@/stores/recording'
 import { useSidePanel } from '@/features/rooms/livekit/hooks/useSidePanel'
 import { useIsAdminOrOwner } from '@/features/rooms/livekit/hooks/useIsAdminOrOwner'
 import { FeatureFlags } from '@/features/analytics/enums'
@@ -50,8 +52,16 @@ export const ScreenRecordingSidePanel = () => {
   const [includeTranscript, setIncludeTranscript] = useState(false)
   // "Transcribe this recording" is a LinTO feature (deferred transcription):
   // offered only to a participant whose capabilities grant it.
-  const { async: canTranscribeAsync } = useLintoCapabilities()
-  const { enabled: isLintoEnabled } = useLintoConfig()
+  const { async: canTranscribeAsync, summary: canSummarize } =
+    useLintoCapabilities()
+  const { enabled: isLintoEnabled, catchupEnabled } = useLintoConfig()
+  const { t: tLinto } = useTranslation('transcription-bot', {
+    keyPrefix: 'deferred',
+  })
+  const { lintoCatchup } = useSnapshot(recordingStore)
+  // The late joiners' brief from the transcribed recording's audio (LinTO).
+  const canCatchUp =
+    includeTranscript && isLintoEnabled && catchupEnabled && canSummarize
   useEffect(() => {
     if (!canTranscribeAsync && includeTranscript) setIncludeTranscript(false)
   }, [canTranscribeAsync, includeTranscript])
@@ -128,6 +138,7 @@ export const ScreenRecordingSidePanel = () => {
         const recordingOptions = {
           ...(language && { language }),
           ...(includeTranscript && hasTranscriptAccess && { transcribe: true }),
+          ...(canCatchUp && hasTranscriptAccess && { catchup: lintoCatchup }),
           ...(encoding && { encoding }),
         }
 
@@ -280,6 +291,27 @@ export const ScreenRecordingSidePanel = () => {
                     isDisabled={statuses.isActive || isPendingToStart}
                     testId="recording-language"
                   />
+                </div>
+              )}
+              {canCatchUp && (
+                <div className={css({ marginTop: '0.75rem' })}>
+                  <Checkbox
+                    size="sm"
+                    data-testid="recording-catchup"
+                    isSelected={lintoCatchup}
+                    onChange={(value) => {
+                      recordingStore.lintoCatchup = value
+                    }}
+                    isDisabled={statuses.isActive || isPendingToStart}
+                  >
+                    <Text variant="sm">{tLinto('catchup')}</Text>
+                  </Checkbox>
+                  <Text
+                    variant="smNote"
+                    className={css({ paddingLeft: '1.625rem' })}
+                  >
+                    {tLinto('catchupHint')}
+                  </Text>
                 </div>
               )}
             </div>
