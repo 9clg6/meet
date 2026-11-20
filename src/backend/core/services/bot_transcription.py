@@ -87,6 +87,12 @@ ROOM_METADATA_CATCHUP_KEY = "linto_transcription_catchup"
 # every participant then sees the same "recording in progress" indicator as for
 # a LiveKit recording, since the audio ends up in Twake Drive; "0" = text only.
 ROOM_METADATA_KEEP_AUDIO_KEY = "linto_transcription_keep_audio"
+# "1" when the run only shows captions: it started while the meeting was being
+# recorded, the recording owns the meeting's memory, so the run keeps nothing
+# (no summary, no audio, no delivery, no Studio conversation) and every
+# participant sees a neutral "live captions" pill instead of the red one;
+# "0" = a run of its own.
+ROOM_METADATA_CAPTIONS_ONLY_KEY = "linto_transcription_captions_only"
 
 # A Meet room drives ONE session channel, always at index 0 — the index (not
 # the channel id) is what namespaces the bot's segment ids
@@ -105,6 +111,7 @@ ROOM_METADATA_KEYS = [
     ROOM_METADATA_STARTED_AT_KEY,
     ROOM_METADATA_CATCHUP_KEY,
     ROOM_METADATA_KEEP_AUDIO_KEY,
+    ROOM_METADATA_CAPTIONS_ONLY_KEY,
 ]
 
 
@@ -527,6 +534,9 @@ class BotTranscriptionService:
                 metadata[ROOM_METADATA_KEEP_AUDIO_KEY] = (
                     "1" if run.get("keep_audio") else "0"
                 )
+                metadata[ROOM_METADATA_CAPTIONS_ONLY_KEY] = (
+                    "1" if run.get("captions_only") else "0"
+                )
                 RoomManagement().update_metadata(str(room.id), metadata)
             else:
                 RoomManagement().update_metadata(
@@ -722,6 +732,11 @@ class BotTranscriptionService:
         limit = settings.LINTO_LIVE_MAX_TRANSLATIONS
         if limit and len(translations) > limit:
             raise TooManyTranslationsError(limit)
+        # While the meeting is recorded, the recording is its memory: the run
+        # only shows captions. The panel asks for it when it shows the
+        # captions form; the recording decides it whatever the panel says.
+        captions_only = data.get("captions_only") is True or self._is_recorded(room)
+        keep_audio = bool(settings.LINTO_LIVE_KEEP_AUDIO) and not captions_only
         headers, organization_id = self._acting_as(user)
         profile_id = self._pick_profile(self._list_profiles(headers, organization_id))
         channel = {
@@ -729,7 +744,7 @@ class BotTranscriptionService:
             "transcriberProfileId": profile_id,
             "enableLiveTranscripts": True,
             "diarization": True,
-            "keepAudio": bool(settings.LINTO_LIVE_KEEP_AUDIO),
+            "keepAudio": keep_audio,
             "translations": translations,
         }
         sessions = f"/api/organizations/{organization_id}/sessions"
@@ -789,7 +804,8 @@ class BotTranscriptionService:
                 room,
                 {
                     **{key: data[key] for key in choices if key in data},
-                    "keep_audio": bool(settings.LINTO_LIVE_KEEP_AUDIO),
+                    "keep_audio": keep_audio,
+                    "captions_only": captions_only,
                     "session_id": str(session_id),
                     "channel_id": channel_id,
                     "org_id": organization_id,
@@ -803,6 +819,18 @@ class BotTranscriptionService:
         if run.get("catchup"):
             self._check_catchup(room, headers, organization_id, session_id)
         return run
+
+    @staticmethod
+    def _is_recorded(room):
+        """Whether a recording (deferred transcription or video) runs in the
+        room: one started, or one about to start."""
+        return models.Recording.objects.filter(
+            room=room,
+            status__in=[
+                models.RecordingStatusChoices.INITIATED,
+                models.RecordingStatusChoices.ACTIVE,
+            ],
+        ).exists()
 
     @staticmethod
     def _catchup_path(organization_id, session_id):
@@ -906,7 +934,13 @@ class BotTranscriptionService:
             raise CatchUpUnavailable(reason)
         return r
 
-    def _stop_studio_run(self, headers, organization_id, session_id, bot_id, name=None):
+    def _stop_studio_run(  # noqa: PLR0913
+        self, headers, organization_id, session_id, bot_id, *, name=None, discard=False
+    ):
+        """Stop the bot and the session. Studio stores a stopped session as a
+        conversation; with ``discard`` the run leaves none: its captions are
+        cleared first, and a conversation stored anyway (a caption committed
+        in between) is deleted."""
         if not organization_id:
             return
         if bot_id:
@@ -915,16 +949,54 @@ class BotTranscriptionService:
                 headers,
                 "bot stop",
             )
-        if session_id:
-            params = {"force": "true"}
-            if name:
-                params["name"] = name
-            self._studio_delete(
-                f"/api/organizations/{organization_id}/sessions/{session_id}",
+        if not session_id:
+            return
+        session_path = f"/api/organizations/{organization_id}/sessions/{session_id}"
+        if discard:
+            try:
+                self._studio("PUT", f"{session_path}/clear", headers, "session clear")
+            except BotTranscriptionException as exc:
+                logger.warning("LinTO: the captions could not be cleared: %s", exc)
+        params = {"force": "true"}
+        if name:
+            params["name"] = name
+        self._studio_delete(
+            session_path,
+            headers,
+            "session stop",
+            timeout=STOP_TIMEOUT,
+            params=params,
+        )
+        if discard and name:
+            self._delete_stored_conversation(headers, organization_id, name)
+
+    def _delete_stored_conversation(self, headers, organization_id, name):
+        """Delete the conversation Studio stored under ``name``, if any (with its
+        translations: Studio deletes a conversation's children with it)."""
+        try:
+            found = self._studio(
+                "GET",
+                f"/api/organizations/{organization_id}/conversations",
                 headers,
-                "session stop",
-                timeout=STOP_TIMEOUT,
-                params=params,
+                "conversation lookup",
+                params={"name": name},
+            )
+        except BotTranscriptionException as exc:
+            logger.warning("LinTO: the stored captions could not be looked up: %s", exc)
+            return
+        items = (
+            found
+            if isinstance(found, list)
+            else (found.get("conversations") or found.get("list") or [])
+        )
+        for item in items:
+            conversation_id = item.get("_id") or item.get("id")
+            if item.get("name") != name or not conversation_id:
+                continue
+            self._studio_delete(
+                f"/api/conversations/{conversation_id}",
+                headers,
+                "conversation delete",
             )
 
     def stop(self, room, user=None, enforce_permission=True):
@@ -939,6 +1011,7 @@ class BotTranscriptionService:
                 return {"status": "idle"}
             if enforce_permission:
                 self._check_may_stop(room, linto, user)
+            captions_only = bool(linto.get("captions_only"))
             conversation_name = f"linto-{room.id}-{int(time.time())}"
             try:
                 headers = self._run_headers(linto, user)
@@ -951,7 +1024,10 @@ class BotTranscriptionService:
                     linto.get("session_id"),
                     linto.get("bot_id"),
                     name=conversation_name,
+                    discard=captions_only,
                 )
+            if captions_only:
+                return self._close_captions_run(room)
             result = self._close_run(room, linto, conversation_name)
             result["recipient_is_you"] = self._is_recipient(room, linto, user)
             return result
@@ -980,6 +1056,13 @@ class BotTranscriptionService:
             raise PermissionDeniedError(
                 "only the starter or a room admin/owner can stop the transcription"
             )
+
+    def _close_captions_run(self, room):
+        """Close a captions-only run: nothing to deliver."""
+        self._set_banner(room, False)
+        self._write_configuration(room, {}, drop=("linto",))
+        logger.info("LinTO captions-only run stopped for room %s", room.id)
+        return {"status": "stopped", "captions_only": True}
 
     def _close_run(self, room, linto, conversation_name):
         self._set_banner(room, False)
@@ -1030,7 +1113,9 @@ class BotTranscriptionService:
         service route, ``share_summary`` default False = the summary also goes
         to the signed-in participants, ``record`` default False, ``catchup``
         default True = a late joiner gets the "before you arrived" summary,
-        ``keep_audio`` the channel's ``keepAudio``). Re-checks the
+        ``keep_audio`` the channel's ``keepAudio``, ``captions_only`` default
+        False = a run beside a recording, which turns every add-on off and
+        keeps nothing). Re-checks the
         transcript permission (defence in depth), drops both summaries without
         the ``summary`` capability, starts the optional video egress when allowed,
         persists ``room.configuration["linto"]`` and sets the banner. Returns the
@@ -1052,6 +1137,11 @@ class BotTranscriptionService:
         keep_audio = bool(
             settings.LINTO_LIVE_KEEP_AUDIO or data.get("keep_audio") is True
         )
+        # A captions-only run keeps nothing: the recording running alongside
+        # owns the summary, the audio and the video.
+        captions_only = data.get("captions_only") is True
+        if captions_only:
+            summary = catchup = record = keep_audio = False
         # Both summaries — at stop, and the late joiners' catch-up — are LLM
         # summaries: neither runs without the `summary` capability.
         if (summary or catchup) and not summary_entitled(user):
@@ -1096,6 +1186,8 @@ class BotTranscriptionService:
             # Advertised in the room metadata: every participant sees the
             # recording indicator while the run keeps the meeting audio.
             "keep_audio": keep_audio,
+            # Advertised in the room metadata: the run only shows captions.
+            "captions_only": captions_only,
             "org_id": data.get("org_id"),
             "session_id": data.get("session_id"),
             "channel_id": data.get("channel_id"),

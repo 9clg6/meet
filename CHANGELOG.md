@@ -10,6 +10,7 @@ and this project adheres to
 
 ### Added
 
+- ✨(backend) a live run started while recording only shows captions, keeps nothing
 - ✨(backend) rooms/{id}/linto/catchup relays the late joiner's summary from Studio
 - ✨(frontend) add jittered exponential backoff to LiveKit reconnections
 - ✨(frontend) tell participants when a recording is interrupted

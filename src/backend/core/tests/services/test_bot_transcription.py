@@ -16,9 +16,10 @@ import requests
 import responses
 
 from core import models
-from core.factories import RoomFactory, UserFactory
+from core.factories import RecordingFactory, RoomFactory, UserFactory
 from core.services.bot_transcription import (
     LINTO_CHANNEL_INDEX,
+    ROOM_METADATA_CAPTIONS_ONLY_KEY,
     ROOM_METADATA_CATCHUP_KEY,
     ROOM_METADATA_CHANNEL_ID_KEY,
     ROOM_METADATA_CHANNEL_INDEX_KEY,
@@ -118,6 +119,29 @@ class TestMarkStarted:
         # The banner call carries the run state, so the metadata can advertise
         # the Studio ids a late joiner needs to catch up.
         self.banner.assert_called_once_with(room, True, user=owner, linto=linto)
+        self.rec.assert_not_called()
+
+    def test_a_captions_only_run_keeps_nothing(self, studio_settings):
+        studio_settings.LINTO_ENTITLEMENTS_ENABLED = False
+        studio_settings.LINTO_LIVE_KEEP_AUDIO = True
+        room, owner = _owner_room()
+        data = {
+            "session_id": "s",
+            "channel_id": "c",
+            "summary": True,
+            "share_summary": True,
+            "catchup": True,
+            "record": True,
+            "keep_audio": True,
+            "captions_only": True,
+        }
+        result = BotTranscriptionService().mark_started(room, data, user=owner)
+        assert result["captions_only"] is True
+        linto = room.configuration["linto"]
+        assert linto["captions_only"] is True
+        for add_on in ("summary", "share_summary", "catchup", "record", "keep_audio"):
+            assert linto[add_on] is False, add_on
+        assert "attendees" not in linto
         self.rec.assert_not_called()
 
     def test_keeps_what_the_previous_delivery_wrote_meanwhile(self, studio_settings):
@@ -403,7 +427,21 @@ class TestBannerMetadata:
             ROOM_METADATA_STARTER_KEY,
             ROOM_METADATA_CATCHUP_KEY,
             ROOM_METADATA_KEEP_AUDIO_KEY,
+            ROOM_METADATA_CAPTIONS_ONLY_KEY,
         }
+
+    def test_a_captions_only_run_is_advertised(self, studio_settings):
+        # Every participant's pill reads it: neutral captions, not the red one.
+        room, owner = _owner_room()
+        for linto, expected in (({"captions_only": True}, "1"), ({}, "0")):
+            with mock.patch(
+                "core.services.bot_transcription.RoomManagement"
+            ) as room_management:
+                BotTranscriptionService()._set_banner(
+                    room, True, user=owner, linto=linto
+                )
+            metadata = room_management.return_value.update_metadata.call_args[0][1]
+            assert metadata[ROOM_METADATA_CAPTIONS_ONLY_KEY] == expected
 
     def test_kept_audio_is_advertised(self, studio_settings):
         # Every participant's recording indicator reads this key.
@@ -453,6 +491,7 @@ class TestBannerMetadata:
         assert ROOM_METADATA_SESSION_ID_KEY in args[2]
         # The recording indicator goes away with the run.
         assert ROOM_METADATA_KEEP_AUDIO_KEY in args[2]
+        assert ROOM_METADATA_CAPTIONS_ONLY_KEY in args[2]
 
     def test_metadata_failure_never_breaks_the_run(self, studio_settings):
         room, owner = _owner_room()
@@ -1231,6 +1270,73 @@ class TestStart:
         assert meta["native"]["visio-native"]["token"] == "lk-jwt"
 
     @responses.activate
+    @pytest.mark.parametrize(
+        "status",
+        [models.RecordingStatusChoices.INITIATED, models.RecordingStatusChoices.ACTIVE],
+    )
+    def test_a_run_beside_a_recording_only_shows_captions(self, run_settings, status):
+        # The recording owns the meeting's memory: whatever the panel asked,
+        # the run keeps nothing (no audio in Studio, no summaries, no video).
+        room, owner = _owner_room()
+        RecordingFactory(room=room, status=status)
+        _mock_studio_start()
+        with mock.patch.object(BotTranscriptionService, "_start_recording") as rec:
+            result = BotTranscriptionService().start(
+                room,
+                {
+                    "translations": ["en"],
+                    "summary": True,
+                    "share_summary": True,
+                    "catchup": True,
+                    "record": True,
+                },
+                user=owner,
+            )
+        rec.assert_not_called()
+        (create,) = _calls("POST", SESSIONS_URL)
+        channel = json.loads(create.body)["channels"][0]
+        assert channel["keepAudio"] is False
+        assert channel["translations"] == ["en"]
+        assert result["captions_only"] is True
+        linto = room.configuration["linto"]
+        assert linto["captions_only"] is True
+        for add_on in ("summary", "share_summary", "catchup", "record", "keep_audio"):
+            assert linto[add_on] is False, add_on
+        # No late-joiner summary: its availability is never checked.
+        assert not _calls("GET", f"{SESSIONS_URL}sess-1/catchup")
+
+    @responses.activate
+    def test_the_panel_asks_for_captions_only(self, run_settings):
+        room, owner = _owner_room()
+        _mock_studio_start()
+        result = BotTranscriptionService().start(
+            room, {"summary": True, "captions_only": True}, user=owner
+        )
+        (create,) = _calls("POST", SESSIONS_URL)
+        assert json.loads(create.body)["channels"][0]["keepAudio"] is False
+        assert result["captions_only"] is True
+        assert result["summary"] is False
+
+    @responses.activate
+    @pytest.mark.parametrize(
+        "status",
+        [
+            models.RecordingStatusChoices.STOPPED,
+            models.RecordingStatusChoices.SAVED,
+            models.RecordingStatusChoices.FAILED_TO_START,
+        ],
+    )
+    def test_a_finished_recording_leaves_the_run_its_own(self, run_settings, status):
+        room, owner = _owner_room()
+        RecordingFactory(room=room, status=status)
+        _mock_studio_start()
+        result = BotTranscriptionService().start(room, {"summary": True}, user=owner)
+        (create,) = _calls("POST", SESSIONS_URL)
+        assert json.loads(create.body)["channels"][0]["keepAudio"] is True
+        assert result["captions_only"] is False
+        assert result["summary"] is True
+
+    @responses.activate
     def test_the_members_right_without_the_native_bot(self, run_settings):
         run_settings.LINTO_VISIO_NATIVE_ENABLED = False
         room, owner = _owner_room()
@@ -1596,6 +1702,114 @@ class TestStop:
         responses.delete(f"{STUDIO}/api/organizations/{ORG}/sessions/sess-1", json={})
         assert BotTranscriptionService().stop(room, user=admin)["status"] == "stopped"
         assert len(responses.calls) == 2
+
+    @staticmethod
+    def _running_captions(room, starter_id):
+        room.configuration = {
+            "linto": {
+                "user_id": starter_id,
+                "org_id": ORG,
+                "session_id": "sess-1",
+                "bot_id": "bot-1",
+                "summary": False,
+                "captions_only": True,
+            }
+        }
+        room.save()
+
+    @staticmethod
+    def _stored_conversations(found):
+        """GET conversations answering ``found(name)`` for the looked-up name."""
+
+        def _answer(request):
+            name = request.params.get("name")
+            return 200, {}, json.dumps(found(name))
+
+        responses.add_callback(
+            responses.GET,
+            f"{STUDIO}/api/organizations/{ORG}/conversations",
+            callback=_answer,
+        )
+
+    @responses.activate
+    def test_a_captions_only_run_leaves_no_trace(self, run_settings):
+        room = RoomFactory()
+        starter = UserFactory()
+        self._running_captions(room, str(starter.id))
+        responses.delete(f"{BOTS_URL}/bot-1", json={})
+        clear = responses.put(
+            f"{STUDIO}/api/organizations/{ORG}/sessions/sess-1/clear", json={}
+        )
+        del_session = responses.delete(
+            f"{STUDIO}/api/organizations/{ORG}/sessions/sess-1", json={}
+        )
+        # A caption committed after the clear: Studio stored it anyway.
+        self._stored_conversations(
+            lambda name: [
+                {"_id": "conv-1", "name": name},
+                {"_id": "conv-other", "name": f"{name}-other"},
+            ]
+        )
+        del_conv = responses.delete(f"{STUDIO}/api/conversations/conv-1", json={})
+
+        assert BotTranscriptionService().stop(room, user=starter) == {
+            "status": "stopped",
+            "captions_only": True,
+        }
+
+        methods = [(c.request.method, c.request.url) for c in responses.calls]
+        # The captions are cleared before the session is stopped.
+        assert methods.index(("PUT", clear.calls[0].request.url)) < methods.index(
+            ("DELETE", del_session.calls[0].request.url)
+        )
+        assert del_conv.call_count == 1
+        assert not _calls("DELETE", f"{STUDIO}/api/conversations/conv-other")
+        room.refresh_from_db()
+        assert "linto" not in room.configuration
+        assert "linto_summary" not in room.configuration
+        self.banner.assert_called_once_with(room, False)
+        self.enqueue.assert_not_called()
+
+    @responses.activate
+    def test_a_captions_only_run_with_nothing_stored(self, run_settings):
+        room = RoomFactory()
+        starter = UserFactory()
+        self._running_captions(room, str(starter.id))
+        responses.delete(f"{BOTS_URL}/bot-1", json={})
+        responses.put(
+            f"{STUDIO}/api/organizations/{ORG}/sessions/sess-1/clear", json={}
+        )
+        responses.delete(f"{STUDIO}/api/organizations/{ORG}/sessions/sess-1", json={})
+        self._stored_conversations(lambda name: [])
+        result = BotTranscriptionService().stop(room, user=starter)
+        assert result == {"status": "stopped", "captions_only": True}
+        assert not _calls("DELETE", f"{STUDIO}/api/conversations/")
+        self.enqueue.assert_not_called()
+
+    @responses.activate
+    def test_a_studio_failure_still_closes_a_captions_only_run(self, run_settings):
+        room = RoomFactory()
+        starter = UserFactory()
+        self._running_captions(room, str(starter.id))
+        responses.delete(f"{BOTS_URL}/bot-1", status=500, body="boom")
+        responses.put(
+            f"{STUDIO}/api/organizations/{ORG}/sessions/sess-1/clear",
+            status=400,
+            body="terminated",
+        )
+        responses.delete(
+            f"{STUDIO}/api/organizations/{ORG}/sessions/sess-1", status=502, body="x"
+        )
+        responses.get(
+            f"{STUDIO}/api/organizations/{ORG}/conversations", status=500, body="x"
+        )
+        assert BotTranscriptionService().stop(room, user=starter) == {
+            "status": "stopped",
+            "captions_only": True,
+        }
+        room.refresh_from_db()
+        assert "linto" not in room.configuration
+        self.enqueue.assert_not_called()
 
     def test_a_stranger_may_not_stop(self, run_settings):
         room = RoomFactory()
