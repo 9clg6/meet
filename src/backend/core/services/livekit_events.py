@@ -21,6 +21,7 @@ from core.recording.services.metadata_collector import (
 )
 from core.recording.services.recording_events import RecordingEventsService
 
+from . import linto_catchup
 from .lobby import LobbyService
 from .presence import PresenceCache
 from .recipients import note_attendee
@@ -214,6 +215,14 @@ class LiveKitEventsService:
             )
             return
 
+        # LinTO catch-up (fork): the side capture egress is not a Recording;
+        # its events are acknowledged here instead of failing with a 500.
+        if data.egress_info.egress_id and linto_catchup.catchup_segment_prefix(
+            data.egress_info
+        ):
+            self._handle_catchup_egress(data)
+            return
+
         # Handle according to received webhook type
         handler = self._webhook_handlers.get(webhook_type.value)
 
@@ -236,6 +245,9 @@ class LiveKitEventsService:
             return
 
         self.recording_events.handle_update(recording, event)
+
+        if event == RecordingWorkerEvent.STARTED:
+            self._start_catchup_capture(recording)
 
     def _handle_egress_ended(self, data):
         """Handle 'egress_ended' event.
@@ -280,6 +292,10 @@ class LiveKitEventsService:
         except RoomManagementException as e:
             logger.exception("Failed to update room's metadata: %s", e)
 
+        # The banner is gone: the catch-up capture must stop with it, whatever
+        # the reason the main egress ended (complete, failed, aborted, limit).
+        self._stop_catchup_capture(recording)
+
         # Stop metadata collector
         if recording.options.get("metadata_collector_dispatch_id", None) is not None:
             try:
@@ -313,6 +329,69 @@ class LiveKitEventsService:
             worker_event=event.value if event is not None else None,
             error_code=error_code or None,
         )
+
+    @staticmethod
+    def _handle_catchup_egress(data):
+        """Log the side capture's own events; a failure while the recording runs
+        leaves the catch-up unavailable (the endpoint finds no capture)."""
+        info = data.egress_info
+        if data.event == LiveKitWebhookEventType.EGRESS_ENDED.value and info.status in (
+            api.EgressStatus.EGRESS_FAILED,
+            api.EgressStatus.EGRESS_ABORTED,
+        ):
+            logger.warning(
+                "Catch-up capture %s ended with status %s: %s",
+                info.egress_id,
+                api.EgressStatus.Name(info.status),
+                info.error,
+            )
+        else:
+            logger.info(
+                "Catch-up capture %s: %s (%s)",
+                info.egress_id,
+                data.event,
+                api.EgressStatus.Name(info.status),
+            )
+
+    @staticmethod
+    def _start_catchup_capture(recording):
+        """Start the catch-up capture once the main recording is ACTIVE. Next to
+        a video recording, wait until its booked admission cost is released."""
+        if not linto_catchup.is_enabled() or not linto_catchup.is_eligible(recording):
+            return
+        delay = settings.LINTO_CATCHUP_VIDEO_START_DELAY_S
+        try:
+            if recording.mode == models.RecordingModeChoices.SCREEN_RECORDING and delay:
+                # Local import: core.tasks imports the models at module scope.
+                from core.tasks.linto_catchup import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+                    start_linto_catchup_capture,
+                )
+
+                start_linto_catchup_capture.apply_async(
+                    args=[str(recording.id)], countdown=delay
+                )
+            else:
+                linto_catchup.start_capture(recording)
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.exception("Catch-up capture start failed for %s", recording.id)
+
+    @staticmethod
+    def _stop_catchup_capture(recording):
+        if not linto_catchup.is_enabled():
+            return
+        try:
+            linto_catchup.on_recording_ended(recording)
+            # Local import: core.tasks imports the models at module scope.
+            from core.tasks.linto_catchup import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+                delete_linto_catchup_segments,
+            )
+
+            delete_linto_catchup_segments.apply_async(
+                args=[str(recording.id)],
+                countdown=settings.LINTO_CATCHUP_DELETE_DELAY_S,
+            )
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.exception("Catch-up capture stop failed for %s", recording.id)
 
     @staticmethod
     def _is_connection_test_room(room_name: str) -> bool:
@@ -403,6 +482,12 @@ class LiveKitEventsService:
             raise ActionFailedError(
                 f"Failed to clear room cache for room {room_id}"
             ) from e
+
+        if linto_catchup.is_enabled():
+            try:
+                linto_catchup.stop_captures(str(room_id))
+            except Exception:  # pylint: disable=broad-exception-caught
+                logger.exception("Catch-up capture stop failed for room %s", room_id)
 
         # LinTO live transcription (fork): the room is gone, so any bot still
         # attached must be torn down (finalizing the Studio session) — otherwise

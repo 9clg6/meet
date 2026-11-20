@@ -1269,6 +1269,54 @@ class Base(Configuration):
         environ_name="LINTO_SPEAKER_IDENTIFICATION_ENABLED",
         environ_prefix=None,
     )
+    # Catch-up without live transcription: a side audio-only egress writes HLS
+    # segments of a transcribed recording into this bucket; a late joiner gets
+    # a brief of what was said before they arrived, made through Studio's
+    # standard API (core/services/linto_catchup.py).
+    LINTO_CATCHUP_ENABLED = values.BooleanValue(
+        False, environ_name="LINTO_CATCHUP_ENABLED", environ_prefix=None
+    )
+    LINTO_CATCHUP_PREFIX = values.Value(
+        "catchup", environ_name="LINTO_CATCHUP_PREFIX", environ_prefix=None
+    )
+    LINTO_CATCHUP_SEGMENT_DURATION_S = values.PositiveIntegerValue(
+        10, environ_name="LINTO_CATCHUP_SEGMENT_DURATION_S", environ_prefix=None
+    )
+    # A participant who joined within this delay of the memory's start (the
+    # capture, or a live run) is not late. Shared with the live catch-up.
+    LINTO_CATCHUP_LATE_THRESHOLD_S = values.PositiveIntegerValue(
+        60, environ_name="LINTO_CATCHUP_LATE_THRESHOLD_S", environ_prefix=None
+    )
+    # Next to a video recording, start the capture once LiveKit's booked cost of
+    # the video egress is released, so admission co-locates it on a busy pod.
+    LINTO_CATCHUP_VIDEO_START_DELAY_S = values.PositiveIntegerValue(
+        15, environ_name="LINTO_CATCHUP_VIDEO_START_DELAY_S", environ_prefix=None
+    )
+    LINTO_CATCHUP_DELETE_DELAY_S = values.PositiveIntegerValue(
+        60, environ_name="LINTO_CATCHUP_DELETE_DELAY_S", environ_prefix=None
+    )
+    # The LLM Gateway summary service (route) that writes the brief.
+    LINTO_CATCHUP_SUMMARY_SERVICE = values.Value(
+        "visio-catchup-brief",
+        environ_name="LINTO_CATCHUP_SUMMARY_SERVICE",
+        environ_prefix=None,
+    )
+    # A brief that covers up to this long before a joiner's arrival serves them.
+    LINTO_CATCHUP_REUSE_S = values.PositiveIntegerValue(
+        120, environ_name="LINTO_CATCHUP_REUSE_S", environ_prefix=None
+    )
+    # Below this many characters of transcript there is nothing to summarize.
+    LINTO_CATCHUP_MIN_CHARS = values.PositiveIntegerValue(
+        200, environ_name="LINTO_CATCHUP_MIN_CHARS", environ_prefix=None
+    )
+    # A job (transcription + summary) still running after this is given up.
+    LINTO_CATCHUP_JOB_TIMEOUT_S = values.PositiveIntegerValue(
+        1800, environ_name="LINTO_CATCHUP_JOB_TIMEOUT_S", environ_prefix=None
+    )
+    # The estimate shown while transcribing: audio duration times this range.
+    LINTO_CATCHUP_ETA_RTF = values.ListValue(
+        ["0.05", "0.3"], environ_name="LINTO_CATCHUP_ETA_RTF", environ_prefix=None
+    )
 
     # Twake Drive integration (Cloudery + Cozy Stack)
     CLOUDERY_URL = values.Value(None, environ_name="CLOUDERY_URL", environ_prefix=None)

@@ -65,6 +65,7 @@ from core.recording.worker.factories import (
 from core.recording.worker.mediator import (
     WorkerServiceMediator,
 )
+from core.services import linto_catchup
 from core.services.bot_transcription import (
     CATCHUP_RATE_LIMIT_SECONDS,
     BotTranscriptionException,
@@ -1175,6 +1176,72 @@ class RoomViewSet(  # pylint: disable=too-many-public-methods
         return drf_response.Response(
             {"languages": languages}, status=drf_status.HTTP_200_OK
         )
+
+    @decorators.action(
+        detail=True,
+        methods=["get", "post"],
+        url_path="linto/audio-catchup",
+        permission_classes=[permissions.HasLiveKitRoomAccess],
+        authentication_classes=[LiveKitTokenAuthentication],
+    )
+    @FeatureFlag.require("linto")
+    def linto_audio_catchup(self, request, pk=None):  # pylint: disable=unused-argument
+        """Brief of what was said before a late participant joined, from the
+        audio of a transcribed recording, when no live run of its own serves
+        one (a live run has its own summary, ``linto/catchup``).
+
+        POST ``{joined_at_ms?}``: start (or reuse) the brief up to the caller's
+        arrival, once per arrival. GET ``?recording_id``: advance the running
+        job by one step and answer its state, progress and the brief. The
+        caller is the holder of the LiveKit room token (``X-LiveKit-Token``
+        scheme) and must be in the room; anonymous guests are served too.
+        Always 200 with a ``state`` (``none``, ``live``, ``unavailable``,
+        ``sending``, ``transcribing``, ``summarizing``, ``ready``,
+        ``too_short``, ``failed``) except when the caller is not in the room
+        (403) or the request is malformed (400).
+        """
+        room = self.get_object()
+        identity = str(request.auth.identity)
+        try:
+            if request.method == "GET":
+                recording_id = request.query_params.get("recording_id")
+                if not recording_id:
+                    return drf_response.Response(
+                        {"error": "recording_id is required"},
+                        status=drf_status.HTTP_400_BAD_REQUEST,
+                    )
+                if not ParticipantsManagement().check_if_in_meeting(
+                    room_name=str(room.id), identity=identity
+                ):
+                    raise ParticipantNotFoundException("not in the room")
+                result = linto_catchup.request_status(room, recording_id)
+            else:
+                joined_at_ms = request.data.get("joined_at_ms")
+                result = linto_catchup.request_brief(
+                    room,
+                    identity,
+                    client_joined_at_ms=int(joined_at_ms) if joined_at_ms else None,
+                )
+        except (
+            ParticipantNotFoundException,
+            ParticipantsManagementException,
+            linto_catchup.NotInRoomError,
+        ):
+            return drf_response.Response(
+                {"error": "not in the room"}, status=drf_status.HTTP_403_FORBIDDEN
+            )
+        except (TypeError, ValueError):
+            return drf_response.Response(
+                {"error": "invalid joined_at_ms"},
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+        except linto_catchup.CatchupError as exc:
+            logger.warning("LinTO audio catch-up failed for room %s: %s", room.id, exc)
+            return drf_response.Response(
+                {"state": "unavailable", "reason": "linto_error"},
+                status=drf_status.HTTP_200_OK,
+            )
+        return drf_response.Response(result, status=drf_status.HTTP_200_OK)
 
     @decorators.action(
         detail=True,

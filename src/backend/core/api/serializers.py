@@ -359,6 +359,9 @@ class RecordingOptions(BaseModel):
             produced with (LinTO). When `None`, the instance default applies.
         share_summary: Whether the summary is also emailed to the signed-in
             participants (LinTO). When `None`, it goes to the room owner only.
+        catchup: Whether a participant who joins late gets a brief of what
+            was said before, from the recording's audio (LinTO). When `None`,
+            no brief and no capture.
 
     """
 
@@ -370,6 +373,7 @@ class RecordingOptions(BaseModel):
     summary: bool | None = None
     summary_service: str | None = None
     share_summary: bool | None = None
+    catchup: bool | None = None
 
     model_config = {"extra": "forbid"}
 

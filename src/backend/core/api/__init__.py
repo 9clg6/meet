@@ -103,6 +103,11 @@ def get_frontend_configuration(request):
             # Pinned ASR profile — the panel never lets the user pick one.
             "default_profile_id": settings.LINTO_STUDIO_DEFAULT_PROFILE_ID,
             "live_max_translations": settings.LINTO_LIVE_MAX_TRANSLATIONS,
+            # Late joiners' brief: the recording option is offered when the
+            # audio catch-up is on; the late threshold is shared with the live
+            # catch-up.
+            "catchup_enabled": settings.LINTO_CATCHUP_ENABLED,
+            "catchup_late_threshold_s": settings.LINTO_CATCHUP_LATE_THRESHOLD_S,
         },
         "diagnostics": {"connection_test_enabled": settings.CONNECTION_TEST_ENABLED},
         "livekit": {

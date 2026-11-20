@@ -62,6 +62,21 @@ def test_config_linto_reports_the_translation_limit(settings, limit):
     assert data["linto"]["live_max_translations"] == limit
 
 
+def test_config_linto_reports_the_late_joiners_brief(settings):
+    """The recording option is offered when the audio catch-up is on; the late
+    threshold is shared with the live catch-up."""
+    settings.LINTO_FEATURE_ENABLED = True
+    settings.LINTO_CATCHUP_ENABLED = True
+    settings.LINTO_CATCHUP_LATE_THRESHOLD_S = 45
+    linto = APIClient().get("/api/v1.0/config/").json()["linto"]
+    assert linto["catchup_enabled"] is True
+    assert linto["catchup_late_threshold_s"] == 45
+
+    settings.LINTO_CATCHUP_ENABLED = False
+    linto = APIClient().get("/api/v1.0/config/").json()["linto"]
+    assert linto["catchup_enabled"] is False
+
+
 def test_config_linto_carries_no_studio_credential_nor_bot_wiring(settings):
     settings.LINTO_FEATURE_ENABLED = True
     settings.LINTO_STUDIO_API_TOKEN = "the-studio-key"

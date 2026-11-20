@@ -525,6 +525,26 @@ def test_start_recording_options_summary_and_service(
     assert recording.options == {"summary": False, "summary_service": "minutes"}
 
 
+def test_start_recording_options_catchup(
+    settings, mock_worker_service_factory, mock_worker_manager
+):
+    """The late joiners' brief is an option of the recording, chosen at start."""
+    settings.RECORDING_ENABLE = True
+    room = RoomFactory()
+    user = UserFactory()
+    room.accesses.create(user=user, role="owner")
+    client = APIClient()
+    client.force_login(user)
+    response = client.post(
+        f"/api/v1.0/rooms/{room.id}/start-recording/",
+        {"mode": "transcript", "options": {"catchup": True}},
+        format="json",
+    )
+    assert response.status_code == 201
+    recording = Recording.objects.get(room=room)
+    assert recording.options == {"catchup": True}
+
+
 @pytest.mark.parametrize("value", [True, 1, "y", "on", "true", "yes", "t"])
 def test_start_recording_options_transcribe_valid_true(
     settings, mock_worker_service_factory, mock_worker_manager, value
