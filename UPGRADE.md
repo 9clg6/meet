@@ -16,6 +16,68 @@ the following command inside your docker container:
 
 ## [Unreleased]
 
+### LinTO fork: the late joiners' brief, from a recording or a live run
+
+A participant who joins late gets "Before you arrived": the side panel opens
+by itself on the Tools panel (desktop; never over another open panel), the
+brief on top of the running tool's view. It comes from a live run of its own
+when its catch-up option is on, otherwise from the audio of a transcribed
+recording whose starter left the new "Catch-up summary" option on. Every
+exchange with LinTO starts from Meet; LinTO's code is unchanged.
+
+Meet:
+
+- New backend variables `LINTO_CATCHUP_*` (README). Off by default
+  (`LINTO_CATCHUP_ENABLED=False`): the option is not offered and nothing is
+  captured. `LINTO_CATCHUP_LATE_THRESHOLD_S` is now 60 s by default and also
+  applies to the live catch-up. The `LINTO_CATCHUP_PRESIGN_*` variables are
+  gone.
+- With it on, a transcribed recording whose option is on runs one more
+  audio-only room composite egress (segments into the recording bucket,
+  `LINTO_CATCHUP_PREFIX`): size the egress for it.
+- Schedule `python manage.py linto_catchup_reconcile` (a CronJob every few
+  minutes), and add a lifecycle rule on the `LINTO_CATCHUP_PREFIX` prefix of
+  the recording bucket as a safety net.
+- The state of a recording's catch-up (text sent so far, brief, running job)
+  lives in the Django cache (Redis), `linto_catchup:state:<recording id>`,
+  until the recording ends.
+- Deploy the backend and the frontend together (`rooms/{id}/linto/audio-catchup/`
+  changed; new recording option `catchup`; new config keys
+  `linto.catchup_enabled` and `linto.catchup_late_threshold_s`).
+
+LinTO, on the Studio and LLM Gateway Meet uses (`LINTO_STUDIO_BASE_URL`):
+
+- **Create the LLM Gateway summary service `visio-catchup-brief`** (or set
+  `LINTO_CATCHUP_SUMMARY_SERVICE` to its route), in the gateway admin:
+  - `service_type: summary`, route `visio-catchup-brief`, scopes
+    `["visio-catchup"]`: neither Studio (scope `linto`) nor Meet's summary
+    picker (scope `meet`) lists it, Studio still resolves it by route;
+  - one flavor, on the instance's summary model: `processing_mode: iterative`,
+    `reduce_summary: true`, `create_new_turn_after: 250`, `max_new_turns: 8`,
+    `summary_turns: 6`, `temperature: 0.2`, `output_type: markdown`;
+  - user prompt (two `{}`: the notes already taken, the new batch):
+    `docs/linto/visio-catchup-brief/notes.md`;
+  - reduce prompt (`prompt_type: reduce`, one `{}`):
+    `docs/linto/visio-catchup-brief/reduce.md`.
+  Without it, the late joiners get no brief (the summary step fails, the
+  block goes away). Check the brief's length and precision with the
+  instance's model (tested with Mistral 7B, see the plan's tests).
+- Studio must accept an upload whose content type is generic
+  (`application/octet-stream`, the `linto` SDK 1.4.1 sends no file name):
+  studio-api `next` since `6fff13ff7` (probe on disk), or a version without a
+  media-type check. Meet sends MPEG-TS (AAC).
+- Routes Meet calls, with the deferred transcription's credential: the SDK
+  upload (`POST /api/organizations/{org}/conversations/create`),
+  `GET /api/conversations/{id}`, `PATCH` and `POST
+  /api/conversations/{id}/turns/{turnId}` (the head text), `POST
+  /api/conversations/{id}/download?format=<service route>`, `GET
+  .../export/list`, `GET .../export/{job}/content`, `DELETE
+  /api/conversations/{id}`. The service account needs the organization's
+  summary permission; the catch-up minutes and summaries are counted for
+  that organization, like the deferred transcription.
+- Nothing to create for the live catch-up: it keeps its `visio-catchup` chat
+  service.
+
 
 ### LinTO fork: live captions on top of a recording
 
