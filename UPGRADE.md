@@ -17,6 +17,27 @@ the following command inside your docker container:
 ## [Unreleased]
 
 
+### LinTO fork: live captions on top of a recording
+
+A live transcription started while the meeting is recorded (deferred
+transcription or video) only shows captions and translations: the recording
+is the meeting's memory. The backend decides it from the active recording,
+whatever the panel sends.
+
+- Such a run keeps nothing: no summary, no late joiners' summary, no video, no
+  audio kept by Studio (`keepAudio` off), no delivery (no document, no Twake
+  Drive file, no email). At the stop, its Studio session is cleared
+  (`PUT /api/organizations/{org}/sessions/{id}/clear`) before it is deleted,
+  and a conversation Studio stored anyway is deleted. The route is in
+  studio-api 1.8.8 and Session-API 1.5.0 (the versions of `rc.yaml`).
+- Stopping the recording leaves the captions running; they stop with their
+  own button, the recording's stop toast, or the end of the meeting.
+- New room-metadata key `linto_transcription_captions_only` (`1` for such a
+  run, cleared at the stop): every participant sees a neutral "Live captions"
+  pill instead of the red one. Nothing to set.
+- Deploy the backend and the frontend together.
+
+
 ### LinTO fork: a cap on the live translation languages
 
 - New backend variable `LINTO_LIVE_MAX_TRANSLATIONS` (default `0`: no limit),
