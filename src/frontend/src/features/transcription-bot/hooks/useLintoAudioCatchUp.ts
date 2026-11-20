@@ -99,6 +99,11 @@ export const requestAudioCatchUpBrief = async (
     })
     apply(body, generation)
     const { status } = audioCatchUpStore.catchUp
+    if (status === 'unavailable') {
+      console.warn(
+        `LinTO audio catch-up unavailable: ${body.reason || 'unknown'}`
+      )
+    }
     if (
       generation === controller.generation &&
       (AUDIO_CATCH_UP_RUNNING.includes(status) || status === 'ready') &&

@@ -215,6 +215,8 @@ export const useLintoCatchUp = () => {
           }
           return
         }
+        // Only now that a summary will come: the panel opens by itself.
+        if (mayOpenPanelRef.current) openLintoRef.current()
         const { text } = await streamLintoCatchUp({
           roomId: meetRoomId,
           token,
@@ -323,7 +325,6 @@ export const useLintoCatchUp = () => {
         }
         return
       }
-      if (mayOpenPanelRef.current) openLintoRef.current()
       await runSummary(roomId, token, joinedAt)
     }
     void run()
