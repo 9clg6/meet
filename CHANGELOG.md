@@ -50,6 +50,8 @@ and this project adheres to
 
 ### Fixed
 
+- 🐛(backend) a missing catch-up summary service ends the job at once, with a warning
+- 🐛(frontend) the live catch-up opens the side panel once its summary starts
 - 🐛(backend) recordings, transcripts and summaries go to the room owner
 - 🐛(frontend) the stop toast says who receives the recording or the summary
 - 🐛(frontend) send a VP9/AV1 screen share as one full-resolution stream again

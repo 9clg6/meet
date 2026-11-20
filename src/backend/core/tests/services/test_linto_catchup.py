@@ -180,11 +180,23 @@ def active_transcript():
     )
 
 
+@pytest.fixture(autouse=True)
+def no_summary_breaker():
+    """No "summary service unavailable" left by another test."""
+    cache.delete(linto_catchup.SUMMARY_UNAVAILABLE_KEY)
+    yield
+    cache.delete(linto_catchup.SUMMARY_UNAVAILABLE_KEY)
+
+
+FIRST_TURN = {"turn_id": "t0", "segment": "first", "words": [{"stime": 0.5}]}
+
+
 @pytest.fixture
 def studio():
     """A fake Studio client."""
     client = mock.MagicMock()
     client.upload.return_value = "conv-1"
+    client.first_turn.return_value = dict(FIRST_TURN)
     with mock.patch.object(linto_catchup, "StudioClient", return_value=client):
         yield client
 
@@ -437,7 +449,9 @@ def test_a_later_transcript_gets_the_previous_text_at_its_head(
     studio.conversation.return_value = _conversation("done", "La suite de la réunion.")
     _status(active_transcript)
 
-    studio.prepend.assert_called_once_with("conv-1", "Ce qui a été dit avant.")
+    studio.prepend.assert_called_once_with(
+        "conv-1", "Ce qui a été dit avant.", FIRST_TURN
+    )
     state = linto_catchup.load_state(active_transcript.id)
     assert state["transcript"] == "Ce qui a été dit avant.\nLa suite de la réunion."
 
@@ -530,6 +544,133 @@ def test_status_of_another_room_recording_is_none(active_transcript):
     }
 
 
+# ── The summary service missing or failing ─────────────────────────────────
+
+
+def _done_transcript(
+    studio, text="La suite de la réunion, assez longue pour un résumé."
+):
+    studio.conversation.return_value = _conversation("done", text)
+
+
+def test_a_missing_summary_service_ends_the_job_at_once_with_a_warning(
+    active_transcript, studio, caplog
+):
+    """Studio cannot run the summary service (missing on the gateway, no
+    gateway): the job ends at the first poll, a warning names the service, and
+    the text Meet took is kept once."""
+    _running(active_transcript)
+    _done_transcript(studio)
+    studio.trigger_summary.side_effect = linto_catchup.StudioHTTPError(
+        "Studio POST /conversations/conv-1/download: HTTP 502",
+        502,
+        "Request failed with status code 404",
+    )
+    with caplog.at_level("WARNING", logger="core.services.linto_catchup"):
+        body = _status(active_transcript)
+
+    assert body["state"] == "failed"
+    studio.delete.assert_called_once_with("conv-1")
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any(
+        ROUTE in m and "Request failed with status code 404" in m and "UPGRADE.md" in m
+        for m in warnings
+    ), warnings
+    assert ROUTE in linto_catchup.summary_unavailable()
+    state = linto_catchup.load_state(active_transcript.id)
+    assert state["transcript"] == "La suite de la réunion, assez longue pour un résumé."
+
+
+def test_after_a_summary_failure_new_arrivals_send_nothing(active_transcript, studio):
+    """While the summary service is known to fail, a late joiner gets
+    "unavailable" at once: no audio is sent nor transcribed."""
+    cache.set(linto_catchup.SUMMARY_UNAVAILABLE_KEY, f"{ROUTE}: HTTP 502", 300)
+    body, read = _arrive(active_transcript, T0 + timedelta(seconds=65))
+    assert body == {
+        "state": "unavailable",
+        "reason": "summary_service",
+        "recording_id": str(active_transcript.id),
+    }
+    read.assert_not_called()
+    studio.upload.assert_not_called()
+
+
+def test_a_ready_brief_is_still_served_after_a_summary_failure(
+    active_transcript, studio
+):
+    """A brief already written still serves while the service fails."""
+    cache.set(linto_catchup.SUMMARY_UNAVAILABLE_KEY, f"{ROUTE}: HTTP 502", 300)
+    linto_catchup.save_state(
+        active_transcript.id,
+        {
+            "transcript": "x" * 50,
+            "covered_until": _iso(T0 + timedelta(seconds=60)),
+            "brief": {
+                "text": "Brief",
+                "covered_until": _iso(T0 + timedelta(seconds=60)),
+            },
+            "job": None,
+            "outcome": "ready",
+        },
+    )
+    body, _ = _arrive(active_transcript, T0 + timedelta(seconds=150))
+    assert body["state"] == "ready"
+    assert body["brief"]["text"] == "Brief"
+
+
+def test_a_replayed_step_adds_nothing_twice(active_transcript, studio):
+    """Studio unreachable when asked for the summary: the next poll retries
+    the request only, the text and the head turn are not added again."""
+    _running(active_transcript, transcript="Ce qui a été dit avant.")
+    _done_transcript(studio)
+    studio.trigger_summary.side_effect = [
+        linto_catchup.CatchupError("Studio unreachable: timeout"),
+        None,
+    ]
+    assert _status(active_transcript)["state"] == "transcribing"
+    assert _status(active_transcript)["state"] == "summarizing"
+
+    assert studio.prepend.call_count == 1
+    assert studio.first_turn.call_count == 1
+    assert studio.trigger_summary.call_count == 2
+    state = linto_catchup.load_state(active_transcript.id)
+    assert state["transcript"] == (
+        "Ce qui a été dit avant.\nLa suite de la réunion, assez longue pour un résumé."
+    )
+
+
+def test_a_failed_summary_job_marks_the_service_unavailable(
+    active_transcript, studio, caplog
+):
+    """The gateway job itself failed: a warning with its error, and the
+    service is marked unavailable for a while."""
+    _running(active_transcript, step="summarizing")
+    studio.summary.return_value = ("error", "model not found")
+    with caplog.at_level("WARNING", logger="core.services.linto_catchup"):
+        assert _status(active_transcript)["state"] == "failed"
+    assert any("model not found" in r.getMessage() for r in caplog.records)
+    assert linto_catchup.summary_unavailable()
+
+
+def test_a_studio_error_carries_its_detail():
+    """Studio's error message is kept in the exception (for the warning)."""
+    with (
+        mock.patch.object(linto_catchup.StudioClient, "_token", return_value="tok"),
+        mock.patch.object(
+            linto_catchup.requests,
+            "request",
+            return_value=_response(
+                502, {"status": "error", "error": "Service not found: x"}
+            ),
+        ),
+        pytest.raises(linto_catchup.StudioHTTPError) as raised,
+    ):
+        linto_catchup.StudioClient().trigger_summary("c1", ROUTE)
+    assert raised.value.status == 502
+    assert raised.value.detail == "Service not found: x"
+    assert "Service not found: x" in str(raised.value)
+
+
 # ── Studio client ───────────────────────────────────────────────────────────
 
 
@@ -557,7 +698,8 @@ def test_prepend_keeps_the_first_turn_words(http):
         _response(200, {}),
         _response(200, {}),
     ]
-    linto_catchup.StudioClient().prepend("c1", "Avant")
+    client = linto_catchup.StudioClient()
+    client.prepend("c1", "Avant", client.first_turn("c1"))
 
     patch_call, post_call = http.call_args_list[1], http.call_args_list[2]
     assert patch_call.args == (

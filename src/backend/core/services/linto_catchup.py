@@ -51,6 +51,10 @@ START_LOCK_TTL = UPLOAD_TIMEOUT + 30
 STEP_LOCK_TTL = 60
 MAX_STEP_ERRORS = 5
 SUMMARY_ETA_S = (5, 60)
+# After the summary service failed, new jobs wait this long (no audio sent nor
+# transcribed for a brief that cannot be written).
+SUMMARY_UNAVAILABLE_KEY = "linto_catchup:summary_unavailable"
+SUMMARY_RETRY_S = 300
 
 PLAYLIST_NAME = "index.m3u8"
 LIVE_PLAYLIST_NAME = "live.m3u8"
@@ -68,6 +72,15 @@ class CatchupError(Exception):
 
 class NotInRoomError(CatchupError):
     """The caller is not a participant of the room."""
+
+
+class StudioHTTPError(CatchupError):
+    """Studio answered with an error status (not a network failure)."""
+
+    def __init__(self, message: str, status: int, detail: str):
+        super().__init__(message)
+        self.status = status
+        self.detail = detail
 
 
 # ── Eligibility and naming ──────────────────────────────────────────────────
@@ -516,8 +529,23 @@ class StudioClient:
     def _ok(self, method, path, **kwargs) -> requests.Response:
         response = self._call(method, path, **kwargs)
         if not 200 <= response.status_code < 300:
-            raise CatchupError(
+            try:
+                body = response.json() or {}
+            except ValueError:
+                body = {}
+            detail = str(
+                (
+                    body.get("error") or body.get("message")
+                    if isinstance(body, dict)
+                    else ""
+                )
+                or (response.text or "")[:200]
+            ).strip()
+            raise StudioHTTPError(
                 f"Studio {method} {path.split('?')[0]}: HTTP {response.status_code}"
+                + (f" {detail}" if detail else ""),
+                response.status_code,
+                detail,
             )
         return response
 
@@ -549,14 +577,18 @@ class StudioClient:
         """The conversation: its transcription job and its turns."""
         return self._ok("GET", f"/conversations/{conversation_id}").json() or {}
 
-    def prepend(self, conversation_id: str, text: str):
-        """Put `text` at the head of the conversation: the first turn takes the
-        text, its own words kept (the export drops a turn without timing), and
-        the original first turn goes back right after it."""
+    def first_turn(self, conversation_id: str) -> dict:
+        """The conversation's first turn, as Studio holds it."""
         turns = self.conversation(conversation_id).get("text") or []
         if not turns:
             raise CatchupError("Studio conversation without turns")
-        first = dict(turns[0])
+        return dict(turns[0])
+
+    def prepend(self, conversation_id: str, text: str, first: dict):
+        """Put `text` at the head of the conversation: its first turn (`first`,
+        read before) takes the text, its own words kept (the export drops a
+        turn without timing), and goes back right after it. Replaying it with
+        the same `first` after a failure does not duplicate anything."""
         path = f"/conversations/{conversation_id}/turns/{first['turn_id']}"
         self._ok("PATCH", path, json={**first, "segment": text})
         original = {k: v for k, v in first.items() if k != "turn_id"}
@@ -588,7 +620,7 @@ class StudioClient:
             return "running", None
         status = export.get("status")
         if status == "error":
-            return "error", None
+            return "error", str(export.get("error") or "").strip() or None
         if status not in ("complete", "done"):
             return "running", None
         job_id = export.get("jobId")
@@ -817,7 +849,58 @@ def _end_job(state: dict, outcome: str):
     state["outcome"] = outcome
 
 
-def _advance(recording, state: dict):
+def summary_unavailable() -> Optional[str]:
+    """Why the summary service failed lately, or None."""
+    return cache.get(SUMMARY_UNAVAILABLE_KEY)
+
+
+def _mark_summary_unavailable(recording, reason: str):
+    route = settings.LINTO_CATCHUP_SUMMARY_SERVICE
+    cache.set(SUMMARY_UNAVAILABLE_KEY, f"{route}: {reason}", SUMMARY_RETRY_S)
+    logger.warning(
+        "Catch-up brief of %s failed: Studio could not run the LLM Gateway "
+        "summary service %r (%s). Is it created on the gateway of %s "
+        "(UPGRADE.md)? Late joiners get no brief for the next %d s.",
+        recording.id,
+        route,
+        reason,
+        settings.LINTO_STUDIO_BASE_URL,
+        SUMMARY_RETRY_S,
+    )
+
+
+def _take_text(recording, state: dict, client, conversation: dict) -> bool:
+    """Once per job, append the new text to what Meet holds and put what it
+    held before at the head of the conversation. Every part is recorded in the
+    job, so a step replayed after a failure never adds anything twice. False
+    when too little was said to summarize (the job then ended)."""
+    job = state["job"]
+    if not job.get("taken"):
+        previous = state.get("transcript") or ""
+        job["held_chars"] = len(previous)
+        state["transcript"] = "\n".join(
+            t for t in (previous, _turns_text(conversation)) if t
+        )
+        state["covered_until"] = job["up_to"]
+        job["taken"] = True
+    if len(state["transcript"]) < settings.LINTO_CATCHUP_MIN_CHARS:
+        _end_job(state, "ready" if state.get("brief") else "too_short")
+        return False
+    held = state["transcript"][: job.get("held_chars", 0)]
+    if held and not job.get("head_put"):
+        if not job.get("first_turn"):
+            job["first_turn"] = client.first_turn(job["conversation_id"])
+        client.prepend(job["conversation_id"], held, job["first_turn"])
+        job["head_put"] = True
+        logger.info(
+            "Catch-up job of %s: %d characters held before put at the head",
+            recording.id,
+            len(held),
+        )
+    return True
+
+
+def _advance(recording, state: dict):  # noqa: PLR0911  # pylint: disable=too-many-return-statements
     """One step of the running job: at most a few short Studio calls."""
     job = state["job"]
     if (_now() - _parse_time(job["started_at"])).total_seconds() > (
@@ -839,31 +922,30 @@ def _advance(recording, state: dict):
                 return
             if transcription.get("state") != "done":
                 return
-            previous = state.get("transcript") or ""
-            transcript = "\n".join(
-                t for t in (previous, _turns_text(conversation)) if t
-            )
-            state["transcript"] = transcript
-            state["covered_until"] = job["up_to"]
-            if len(transcript) < settings.LINTO_CATCHUP_MIN_CHARS:
-                _end_job(state, "ready" if state.get("brief") else "too_short")
+            if not _take_text(recording, state, client, conversation):
                 return
-            if previous:
-                client.prepend(conversation_id, previous)
-                logger.info(
-                    "Catch-up job of %s: %d characters held before put at the head",
-                    recording.id,
-                    len(previous),
-                )
-            client.trigger_summary(conversation_id, route)
+            try:
+                client.trigger_summary(conversation_id, route)
+            except StudioHTTPError as e:
+                # The service is missing, or the gateway cannot run it: asking
+                # again on this conversation would not help.
+                _mark_summary_unavailable(recording, f"HTTP {e.status} {e.detail}")
+                _end_job(state, "ready" if state.get("brief") else "failed")
+                return
             job["step"] = "summarizing"
             job["summary_started_at"] = _iso(_now())
         elif job["step"] == "summarizing":
             status, text = client.summary(conversation_id, route)
             if status == "running":
                 return
-            if status == "error" or not text:
-                logger.warning("Catch-up summary of %s failed", recording.id)
+            if status == "error":
+                _mark_summary_unavailable(recording, f"the job failed: {text}")
+                _end_job(state, "ready" if state.get("brief") else "failed")
+                return
+            if not text:
+                logger.warning(
+                    "Catch-up summary of %s failed: the summary is empty", recording.id
+                )
                 _end_job(state, "ready" if state.get("brief") else "failed")
                 return
             state["brief"] = {
@@ -929,6 +1011,19 @@ def request_brief(  # noqa: PLR0911  # pylint: disable=too-many-return-statement
         reuse = timedelta(seconds=settings.LINTO_CATCHUP_REUSE_S)
         covered = _parse_time(brief["covered_until"]) if brief else None
         if not state.get("job") and not (covered and covered >= joined_at - reuse):
+            unavailable = summary_unavailable()
+            if unavailable:
+                logger.info(
+                    "Catch-up brief of %s not started, the summary service "
+                    "failed lately (%s)",
+                    recording.id,
+                    unavailable,
+                )
+                return {
+                    "state": "unavailable",
+                    "reason": "summary_service",
+                    "recording_id": str(recording.id),
+                }
             _start_job(recording, state, joined_at)
             save_state(recording.id, state)
     return _view(recording, load_state(recording.id), joined_at)

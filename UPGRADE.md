@@ -59,9 +59,14 @@ LinTO, on the Studio and LLM Gateway Meet uses (`LINTO_STUDIO_BASE_URL`):
     `docs/linto/visio-catchup-brief/notes.md`;
   - reduce prompt (`prompt_type: reduce`, one `{}`):
     `docs/linto/visio-catchup-brief/reduce.md`.
-  Without it, the late joiners get no brief (the summary step fails, the
-  block goes away). Check the brief's length and precision with the
-  instance's model (tested with Mistral 7B, see the plan's tests).
+  Without it (or without an LLM Gateway behind Studio), the first late
+  joiner's job stops at the summary step and Meet logs one WARNING
+  `Catch-up brief of <recording> failed: Studio could not run the LLM Gateway
+  summary service 'visio-catchup-brief' (<Studio's error>)`; for the next
+  5 minutes the late joiners get no brief and no audio is sent nor
+  transcribed for them (a brief already written still serves). Check the
+  brief's length and precision with the instance's model (tested with
+  Mistral 7B).
 - Studio must accept an upload whose content type is generic
   (`application/octet-stream`, the `linto` SDK 1.4.1 sends no file name):
   studio-api `next` since `6fff13ff7` (probe on disk), or a version without a
