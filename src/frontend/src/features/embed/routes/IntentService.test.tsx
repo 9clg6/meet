@@ -15,6 +15,7 @@ import { ApiError } from '@/api/ApiError'
 import { navigateTo } from '@/navigation/navigateTo'
 import { useRoomData } from '@/features/rooms/livekit/hooks/useRoomData'
 import { routes } from '@/routes'
+import { permissionsStore } from '@/stores/permissions'
 import { useEmbedIdleLeave } from '../EmbedIdleContext'
 import IntentService from './IntentService'
 
@@ -301,6 +302,53 @@ describe('/intents?intent=<id>', () => {
       ])
       expect(everything).not.toContain(TOKEN)
       expect(everything).not.toContain(STACK)
+    })
+
+    it('learns that camera and microphone are granted, so the toggles are not drawn as permission needed', async () => {
+      // what the toggles read (useCannotUseDevice): fresh page, nothing known
+      permissionsStore.isLoading = true
+      permissionsStore.cameraPermission = undefined
+      permissionsStore.microphonePermission = undefined
+      const granted = {
+        state: 'granted',
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }
+      Object.defineProperty(navigator, 'permissions', {
+        configurable: true,
+        value: { query: vi.fn(() => Promise.resolve(granted)) },
+      })
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: {
+          enumerateDevices: () =>
+            Promise.resolve([
+              { kind: 'audioinput', label: 'Mic' },
+              { kind: 'videoinput', label: 'Cam' },
+            ]),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        },
+      })
+      try {
+        await renderIntent()
+        act(() => lk().onConnected())
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(0)
+        })
+        expect({
+          isLoading: permissionsStore.isLoading,
+          camera: permissionsStore.cameraPermission,
+          microphone: permissionsStore.microphonePermission,
+        }).toEqual({
+          isLoading: false,
+          camera: 'granted',
+          microphone: 'granted',
+        })
+      } finally {
+        delete (navigator as { permissions?: unknown }).permissions
+        delete (navigator as { mediaDevices?: unknown }).mediaDevices
+      }
     })
 
     it('says joined when LiveKit is connected, not before', async () => {

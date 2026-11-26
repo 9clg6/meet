@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Route, Router } from 'wouter'
 import { memoryLocation } from 'wouter/memory-location'
 import { Conference } from '@/features/rooms/components/Conference'
+import { Permissions } from '@/features/rooms/components/Permissions'
 import { Button } from '@/primitives'
 import { EmbedIdleContext } from '../EmbedIdleContext'
 import {
@@ -72,13 +73,13 @@ const InRoom = ({ room, children }: { room: string; children: ReactNode }) => {
 }
 
 /**
- * Meet as the service of a cozy intent: waits for the data of the host, then
- * enters the call with the LiveKit token of the host (the Meet session, if
- * any, only serves to exchange the platform token). It
- * only shows a sign-in button (no session) or an error that no service could
- * tell the host; nothing once the call is over.
+ * Waits for the data of the host, then enters the call with the LiveKit token
+ * of the host (the Meet session, if any, only serves to exchange the platform
+ * token). It only shows a sign-in button (no session) or an error that no
+ * service could tell the host; nothing once the call is over.
+ * Used by: IntentService.
  */
-const IntentService = () => {
+const IntentCall = () => {
   const { t } = useTranslation()
   const { join, isLeaving, isLeavingRef, failure, signIn, bridge } =
     useIntentHost()
@@ -103,5 +104,19 @@ const IntentService = () => {
     </InRoom>
   )
 }
+
+/**
+ * Meet as the service of a cozy intent (the /intents page).
+ * Mounts `Permissions` beside the call, as the room route does: it watches
+ * the camera and microphone permissions from the first render (without it
+ * the store stays loading and the device toggles show "permission needed"),
+ * and draws the dialog a blocked device opens.
+ */
+const IntentService = () => (
+  <>
+    <Permissions />
+    <IntentCall />
+  </>
+)
 
 export default IntentService
