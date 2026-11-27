@@ -21,10 +21,9 @@ describe('intent service routes', () => {
     }
   )
 
-  it('opens /intents/signed-in on its own route', () => {
-    expect(
-      match(routes.intentSignedIn.path, '/intents/signed-in')
-    ).not.toBeNull()
-    expect(match(routes.intentService.path, '/intents/signed-in')).toBeNull()
+  it('has no sign-in route: the session exists before the host frames /intents', () => {
+    expect(routes).not.toHaveProperty('intentSignedIn')
+    const paths = Object.values(routes).map(({ path }) => String(path))
+    expect(paths.filter((p) => p.includes('signed-in'))).toEqual([])
   })
 })

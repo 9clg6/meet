@@ -4,11 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OptionsMenuItems } from './OptionsMenuItems'
 
 /*
- * The options menu of the call. Framed by Chat (/intents) there is no Meet
- * session: Picture-in-picture, the transcript and the screen recording
- * (protocol twake-meet-embed v1: "no picture-in-picture, no recording/
- * transcript/admin actions that need a Meet session") are not offered, even
- * where the browser and the room would allow them. Elsewhere the menu is as
+ * The options menu of the call. Framed by Chat (/intents), the call is the
+ * host's: Picture-in-picture, the transcript and the screen recording are
+ * not offered, even where the browser and the room would allow them.
+ * Elsewhere the menu is as
  * before. The neighbours are stubs; the three entries below are made available
  * by their own hooks, as on a desktop Chromium with a recording-capable room.
  */

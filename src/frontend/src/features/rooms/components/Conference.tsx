@@ -139,7 +139,7 @@ const getConnectionEndReason = (
  * Set by /intents: the call is joined with the LiveKit token and the
  * media choices of the Chat page that frames Meet, and reports to it.
  */
-export type EmbedOptions = {
+export type IntentOptions = {
   token: string
   audio: boolean
   video: boolean
@@ -149,7 +149,7 @@ export type EmbedOptions = {
   onError: (error: Error) => void
 }
 
-const embedRoomData = (roomId: string, token: string): ApiRoom => ({
+const intentRoomData = (roomId: string, token: string): ApiRoom => ({
   id: roomId,
   name: roomId,
   slug: roomId,
@@ -161,12 +161,12 @@ export const Conference = ({
   roomId,
   mode = 'join',
   onLobbyRequired,
-  embed,
+  intent,
 }: {
   roomId: string
   mode?: 'join' | 'create'
   onLobbyRequired: () => void
-  embed?: EmbedOptions
+  intent?: IntentOptions
 }) => {
   const { t } = useTranslation('rooms')
   const { data: apiConfig } = useConfig()
@@ -197,13 +197,13 @@ export const Conference = ({
         return joinRoom({ roomId, username })
       }),
     retry: false,
-    // Embedded: Chat already holds the token, the API is not asked
-    enabled: !embed,
-    initialData: embed && embedRoomData(roomId, embed.token),
+    // An intent call: the host already holds the token, the API is not asked
+    enabled: !intent,
+    initialData: intent && intentRoomData(roomId, intent.token),
   })
 
-  const audioEnabled = embed?.audio ?? userConfig.audioEnabled
-  const videoEnabled = embed?.video ?? userConfig.videoEnabled
+  const audioEnabled = intent?.audio ?? userConfig.audioEnabled
+  const videoEnabled = intent?.video ?? userConfig.videoEnabled
 
   const isLobbyRequired =
     !!createRoomData && !createRoomData.livekit && !hasJoined
@@ -249,7 +249,7 @@ export const Conference = ({
     [roomOptions, apiConfig?.livekit.reconnect]
   )
   // The room is recreated when /config/ arrives; the one thrown away may still
-  // report its disconnection, which the embedding must not take for the call's
+  // report its disconnection, which the intent page must not take for the call's
   const currentRoom = useRef(room)
   useEffect(() => {
     currentRoom.current = room
@@ -291,25 +291,25 @@ export const Conference = ({
 
   // LiveKitRoom lists its callbacks in the deps of its effects: a new function
   // on each render would reconnect the room. The callbacks passed to it are
-  // stable and read the latest embed and handleConnected through refs.
-  const embedRef = useRef(embed)
+  // stable and read the latest intent options and handleConnected through refs.
+  const intentRef = useRef(intent)
   const handleConnectedRef = useRef(handleConnected)
   useEffect(() => {
-    embedRef.current = embed
+    intentRef.current = intent
     handleConnectedRef.current = handleConnected
-  }, [embed, handleConnected])
+  }, [intent, handleConnected])
 
-  // Synchronous: the embedding reports as soon as LiveKit is connected
+  // Synchronous: the intent page reports as soon as LiveKit is connected
   const onConnected = useCallback(() => {
-    embedRef.current?.onConnected()
+    intentRef.current?.onConnected()
     void handleConnectedRef.current()
   }, [])
 
   const handleDisconnected = useCallback(
     (reason?: DisconnectReason) => {
-      const currentEmbed = embedRef.current
-      if (currentEmbed) {
-        if (room === currentRoom.current) currentEmbed.onDisconnected(reason)
+      const currentIntent = intentRef.current
+      if (currentIntent) {
+        if (room === currentRoom.current) currentIntent.onDisconnected(reason)
         return
       }
       navigateTo(
@@ -328,16 +328,16 @@ export const Conference = ({
 
   const handleLiveKitError = useCallback((e: Error) => {
     handleError(e)
-    if (!isBenignError(e)) embedRef.current?.onError(e)
+    if (!isBenignError(e)) intentRef.current?.onError(e)
   }, [])
 
   useEffect(() => {
-    if (!embed) void captureMediaEvent('visit-room', { slug: roomId })
-  }, [roomId, embed])
+    if (!intent) void captureMediaEvent('visit-room', { slug: roomId })
+  }, [roomId, intent])
 
   useEffect(() => {
-    if (embed?.isLeaving) void room.disconnect()
-  }, [embed?.isLeaving, room])
+    if (intent?.isLeaving) void room.disconnect()
+  }, [intent?.isLeaving, room])
 
   useEffect(() => {
     if (createRoomData?.livekit) setHasJoined(true)
@@ -380,7 +380,7 @@ export const Conference = ({
           room={room}
           serverUrl={serverUrl}
           token={createRoomData?.livekit?.token}
-          connect={isConnectionWarmedUp && !embed?.isLeaving}
+          connect={isConnectionWarmedUp && !intent?.isLeaving}
           audio={audioEnabled}
           video={
             videoEnabled && {
@@ -399,8 +399,8 @@ export const Conference = ({
         >
           <WatchMediaDeviceErrors />
           <VideoConference />
-          {!isMobile && !embed && <InviteDialog mode={mode} />}
-          {!embed && <PictureInPictureConference />}
+          {!isMobile && !intent && <InviteDialog mode={mode} />}
+          {!intent && <PictureInPictureConference />}
           <MeetDevtools />
         </LiveKitRoom>
       </Screen>

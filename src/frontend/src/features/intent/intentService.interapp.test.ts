@@ -66,7 +66,6 @@ describe('startIntentService through the real cozy-interapp', () => {
       onJoin,
       onLeave: vi.fn(),
       onError: vi.fn(),
-      onNeedsSignIn: vi.fn(),
     }
     const bridge = startIntentService(handlers)!
 

@@ -42,22 +42,19 @@ The host leaves with `{ leave: true }` (`service.onData`).
 
 ## No session
 
-A 401 on the stack token shows a "Sign in to Meet" button (a popup needs a
-click). It opens the Meet sign-in in a popup that comes back to
-`/intents/signed-in`, which tells the page (`postMessage` to its own origin)
-and closes itself. The page then asks for the stack token once more; a second
-401 is the error `unauthenticated`. A 409 `no_twake_instance` (a session from
-before the `workplaceFqdn` scope: signing in again fills `twake_instance`)
-shows the same button as a 401; a second 409 is `unreachable`. A blocked popup is `popup_blocked`. These
-errors, and `unreachable` (any other 409, 400, 5xx, network), are shown by the page
-itself: no service exists yet to tell the host.
+The page never signs in: the Meet session must exist when the host mounts the
+iframe. A 401 on the stack token, or a 409 `no_twake_instance` (a session from
+before the `workplaceFqdn` scope), is the error `unauthenticated`; any other
+409, 400, 5xx or network failure is `unreachable`. Nothing is tried again.
+These errors are shown by the page itself: no service exists yet to tell the
+host.
 
 ## Framing
 
 `/intents` is framed by the page that opens the intent (cozy-interapp puts the
 iframe in that page, with the URL the stack gave), not by cozy-stack: Meet must
 allow the origin of that page (Twake Chat, or whichever app opens the intent)
-in `Content-Security-Policy: frame-ancestors` for `/intents`. `/intents/signed-in` is a popup and must **not** be framable.
+in `Content-Security-Policy: frame-ancestors` for `/intents`.
 This repository sets no framing header itself (the Django
 `XFrameOptionsMiddleware` and the nginx of `src/frontend/default.conf` add
 none): they come from the deployment (ingress), where `/intents` is allowed.
@@ -71,5 +68,5 @@ All of these are deployment settings, none is in this repository:
 - **Stack**: in the context of the instance, `allow_app_token_exchange: true` and an `app_token_exchange` entry keyed by the SSO client of Meet (the `aud` of its id token), with `software_id: registry://visio` (the app must be installed from a registry) and `instance_claim: workplaceFqdn`. The id token must carry `sid`.
 - **Flag**: `visio.embedded-app-url` of the instance (the flag Visio already uses for the root of Meet) is the origin of Meet, not the URL of `/intents`; the stack appends the `href` itself. Without it the stack serves the intent from the Visio subdomain, so it must be set on each instance. The manifest of Visio needs no permission on a doctype for this intent.
 - **Framing**: see above.
-- **Sign-in popup**: the Meet session cookie must reach the framed page, so Chat and Meet are on the same site (for example both under `*.example.org`). On different sites the frame has no session and the popup cannot give it one.
+- **Session**: the Meet session cookie must reach the framed page, so Chat and Meet are on the same site (for example both under `*.example.org`). On different sites the frame has no session and the page shows `unauthenticated`.
 - **Intent id**: the page ignores an `intent` that is not a plain identifier (letters, digits, `-` and `_`, 128 characters at most), and never sends the stack token outside the platform URL.

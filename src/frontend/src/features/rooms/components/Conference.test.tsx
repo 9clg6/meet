@@ -6,12 +6,12 @@ import { DisconnectReason } from 'livekit-client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { navigateTo } from '@/navigation/navigateTo'
 import { reportError } from '@/features/analytics/telemetry'
-import { Conference, type EmbedOptions } from './Conference'
+import { Conference, type IntentOptions } from './Conference'
 
 /*
  * useLiveKitRoom reconnects when the onError (or onConnected, onDisconnected)
  * it is given changes identity: Conference must hand LiveKitRoom callbacks
- * that stay the same from one render to the next, whatever the embedding
+ * that stay the same from one render to the next, whatever the intent page
  * recreates on each render, and that still reach the latest ones.
  */
 
@@ -99,9 +99,9 @@ const lk = () =>
     onError: (error: Error) => void
   }
 
-// A new embed (and new functions) on each call, as IntentService does
-const freshEmbed = () => {
-  const embed = {
+// New intent options (and new functions) on each call, as IntentService does
+const freshIntent = () => {
+  const intent = {
     token: 'secret',
     audio: true,
     video: false,
@@ -110,17 +110,17 @@ const freshEmbed = () => {
     onDisconnected: vi.fn(),
     onError: vi.fn(),
   }
-  return embed satisfies EmbedOptions
+  return intent satisfies IntentOptions
 }
 
-const tree = (embed?: EmbedOptions) => (
+const tree = (intent?: IntentOptions) => (
   <QueryClientProvider client={new QueryClient()}>
-    <Conference roomId={ROOM} onLobbyRequired={() => {}} embed={embed} />
+    <Conference roomId={ROOM} onLobbyRequired={() => {}} intent={intent} />
   </QueryClientProvider>
 )
 
-const renderAndLoad = async (embed?: EmbedOptions) => {
-  const view = render(tree(embed))
+const renderAndLoad = async (intent?: IntentOptions) => {
+  const view = render(tree(intent))
   await vi.waitFor(() => expect(livekit.props.onError).toBeDefined())
   return view
 }
@@ -169,23 +169,23 @@ describe('Conference callbacks given to LiveKitRoom', () => {
     })
   })
 
-  describe('an embedded call whose embed is new on every render', () => {
+  describe('an intent call whose options are new on every render', () => {
     it('keeps the same onError, onConnected and onDisconnected across renders', async () => {
-      const view = await renderAndLoad(freshEmbed())
+      const view = await renderAndLoad(freshIntent())
       const first = { ...lk() }
-      view.rerender(tree(freshEmbed()))
-      view.rerender(tree(freshEmbed()))
+      view.rerender(tree(freshIntent()))
+      view.rerender(tree(freshIntent()))
       expect(lk().onError).toBe(first.onError)
       expect(lk().onConnected).toBe(first.onConnected)
       expect(lk().onDisconnected).toBe(first.onDisconnected)
     })
 
-    it('calls the latest embed functions', async () => {
-      const first = freshEmbed()
+    it('calls the latest intent functions', async () => {
+      const first = freshIntent()
       const view = await renderAndLoad(first)
-      const second = freshEmbed()
+      const second = freshIntent()
       view.rerender(tree(second))
-      const third = freshEmbed()
+      const third = freshIntent()
       view.rerender(tree(third))
 
       lk().onConnected()

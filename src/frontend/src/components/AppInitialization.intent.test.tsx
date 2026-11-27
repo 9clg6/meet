@@ -37,7 +37,7 @@ describe('cozy bridge', () => {
     expect(bridge.created).toHaveBeenCalled()
   })
 
-  it('is not mounted under /intents: that page talks to Chat only through twake-meet-embed', () => {
+  it('is not mounted under /intents: that page talks to Chat only through cozy-interapp', () => {
     window.history.pushState({}, '', `/intents`)
     render(<AppInitialization />)
     expect(bridge.created).not.toHaveBeenCalled()

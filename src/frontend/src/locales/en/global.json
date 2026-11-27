@@ -2,15 +2,11 @@
   "backToHome": "Back to homescreen",
   "cancel": "Cancel",
   "closeDialog": "Close dialog",
-  "embed": {
-    "intent": {
-      "error": {
-        "unauthenticated": "You are not signed in to Meet.",
-        "popup_blocked": "The sign-in window was blocked by the browser.",
-        "unreachable": "Meet could not be reached.",
-        "unsupported": "This page was not opened by a compatible application."
-      },
-      "signIn": "Sign in to Meet"
+  "intent": {
+    "error": {
+      "unauthenticated": "You are not signed in to Meet.",
+      "unreachable": "Meet could not be reached.",
+      "unsupported": "This page was not opened by a compatible application."
     }
   },
   "error": {

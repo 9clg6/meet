@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { type ReactNode } from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import {
   ConnectionError,
   ConnectionErrorReason,
@@ -16,14 +16,14 @@ import { navigateTo } from '@/navigation/navigateTo'
 import { useRoomData } from '@/features/rooms/livekit/hooks/useRoomData'
 import { routes } from '@/routes'
 import { permissionsStore } from '@/stores/permissions'
-import { useEmbedIdleLeave } from '../EmbedIdleContext'
+import { useIntentIdleLeave } from '../IntentIdleContext'
 import IntentService from './IntentService'
 
 /*
  * /intents?intent=<id>: Meet is the service of a cozy intent (cozy-interapp).
- * Same join / leave / idle / disconnect semantics as /embed/<uuid>, only the
- * transport changes: the host speaks through the service, never postMessage.
- * LiveKit and the in-call UI are stubs.
+ * The host speaks through the service, never a postMessage of our own. The
+ * Meet session already exists when the host mounts the iframe: the page
+ * never offers to sign in. LiveKit and the in-call UI are stubs.
  */
 
 const idle = vi.hoisted(() => ({ leave: null as (() => void) | null }))
@@ -67,7 +67,7 @@ vi.mock('@/features/rooms/livekit/utils/reconnectPolicy', () => ({
 vi.mock('@/features/rooms/livekit/prefabs/VideoConference', () => ({
   VideoConference: () => {
     const room = useRoomData()
-    idle.leave = useEmbedIdleLeave()
+    idle.leave = useIntentIdleLeave()
     return (
       <div data-testid="video-conference">
         {room ? `${room.id}|${room.livekit?.token}` : 'no room data'}
@@ -115,7 +115,7 @@ vi.mock('cozy-interapp', () => ({
   },
 }))
 // no i18n instance in tests: t(key) answers the key. The strings are checked
-// in src/locales/embedIntent.test.ts
+// in src/locales/intentLocales.test.ts
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }))
@@ -511,126 +511,71 @@ describe('/intents?intent=<id>', () => {
     })
   })
 
+  // The session must exist when the host mounts the iframe: no sign-in here
   describe('a session that is missing', () => {
-    const popup = { closed: false, close: vi.fn() }
-    const refuse401 = () =>
-      vi
-        .mocked(fetchApi)
-        .mockRejectedValueOnce(new ApiError(401, {}))
-        .mockResolvedValue({
-          access_token: STACK,
-          platform_url: 'https://alice.twake.example.org',
-        })
-
     beforeEach(() => {
-      popup.closed = false
-      vi.spyOn(window, 'open').mockReturnValue(popup as never)
+      vi.spyOn(window, 'open').mockReturnValue(null)
     })
 
-    it('shows a sign-in button and opens no popup before the click', async () => {
-      refuse401()
-      await renderIntent()
-      expect(
-        screen.getByRole('button', { name: 'embed.intent.signIn' })
-      ).toBeTruthy()
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS)
-      })
-      expect(window.open).not.toHaveBeenCalled()
-      expect(screen.queryByTestId('livekit-room')).toBeNull()
-      expect(interapp.createService).not.toHaveBeenCalled()
-    })
-
-    it('opens the popup on the click, then joins once the popup closed', async () => {
-      refuse401()
-      await renderIntent()
-      fireEvent.click(
-        screen.getByRole('button', { name: 'embed.intent.signIn' })
-      )
-      expect(window.open).toHaveBeenCalledTimes(1)
-      popup.closed = true
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2_000)
-      })
-      expect(screen.getByTestId('livekit-room')).toBeTruthy()
-      expect(
-        screen.queryByRole('button', { name: 'embed.intent.signIn' })
-      ).toBeNull()
-    })
-
-    it('says embed.intent.error.popup_blocked when the click opens no popup', async () => {
-      refuse401()
-      vi.mocked(window.open).mockReturnValue(null)
-      await renderIntent()
-      fireEvent.click(
-        screen.getByRole('button', { name: 'embed.intent.signIn' })
-      )
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(0)
-      })
-      expect(screen.getByText('embed.intent.error.popup_blocked')).toBeTruthy()
-      expect(screen.queryByTestId('livekit-room')).toBeNull()
-    })
-
-    it('shows the sign-in button on a 401 whose body is id_token_rejected', async () => {
-      vi.mocked(fetchApi).mockRejectedValueOnce(
-        new ApiError(401, { error: 'id_token_rejected' })
-      )
-      await renderIntent()
-      expect(
-        screen.getByRole('button', { name: 'embed.intent.signIn' })
-      ).toBeTruthy()
-      expect(screen.queryByRole('alert')).toBeNull()
-      expect(screen.queryByTestId('livekit-room')).toBeNull()
-    })
-
-    it('says embed.intent.error.unauthenticated when it is still 401 after the sign-in', async () => {
-      vi.mocked(fetchApi).mockRejectedValue(new ApiError(401, {}))
-      await renderIntent()
-      fireEvent.click(
-        screen.getByRole('button', { name: 'embed.intent.signIn' })
-      )
-      popup.closed = true
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2_000)
-      })
-      expect(
-        screen.getByText('embed.intent.error.unauthenticated')
-      ).toBeTruthy()
-      expect(screen.queryByTestId('livekit-room')).toBeNull()
-    })
+    it.each([
+      ['a 401', new ApiError(401, {})],
+      [
+        'a 401 id_token_rejected',
+        new ApiError(401, { error: 'id_token_rejected' }),
+      ],
+      [
+        'a 409 no_twake_instance',
+        new ApiError(409, { error: 'no_twake_instance' }),
+      ],
+    ])(
+      'shows the unauthenticated alert on %s, with no sign-in button and no call',
+      async (_n, refusal) => {
+        vi.mocked(fetchApi).mockRejectedValue(refusal)
+        await renderIntent()
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS)
+        })
+        expect(screen.getByRole('alert').textContent).toBe(
+          'intent.error.unauthenticated'
+        )
+        expect(screen.queryByRole('button')).toBeNull()
+        expect(window.open).not.toHaveBeenCalled()
+        expect(screen.queryByTestId('livekit-room')).toBeNull()
+        expect(interapp.createService).not.toHaveBeenCalled()
+      }
+    )
   })
 
   describe('an error before the service exists is shown by the page', () => {
     it.each([409, 400, 502])(
-      'shows embed.intent.error.unreachable on a %s, with no call and no button',
+      'shows intent.error.unreachable on a %s, with no call and no button',
       async (status) => {
         vi.mocked(fetchApi).mockRejectedValue(new ApiError(status, {}))
         await renderIntent()
-        expect(screen.getByText('embed.intent.error.unreachable')).toBeTruthy()
+        expect(screen.getByText('intent.error.unreachable')).toBeTruthy()
         expect(screen.queryByTestId('livekit-room')).toBeNull()
         expect(screen.queryByRole('button')).toBeNull()
         expect(interapp.createService).not.toHaveBeenCalled()
       }
     )
 
-    it('shows embed.intent.error.unreachable on a 502 stack_exchange_failed, with no button', async () => {
+    it('shows intent.error.unreachable on a 502 stack_exchange_failed, with no button', async () => {
       vi.mocked(fetchApi).mockRejectedValue(
         new ApiError(502, { error: 'stack_exchange_failed' })
       )
       await renderIntent()
-      expect(screen.getByText('embed.intent.error.unreachable')).toBeTruthy()
+      expect(screen.getByText('intent.error.unreachable')).toBeTruthy()
       expect(screen.queryByRole('button')).toBeNull()
     })
 
-    it('shows embed.intent.error.unsupported when the service does not come in 10 s', async () => {
+    it('shows intent.error.unsupported when the service does not come in 10 s', async () => {
       interapp.createService.mockReturnValue(new Promise(() => {}))
       await renderIntent()
-      expect(screen.queryByText('embed.intent.error.unsupported')).toBeNull()
+      expect(screen.queryByText('intent.error.unsupported')).toBeNull()
       await act(async () => {
         await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS)
       })
-      expect(screen.getByText('embed.intent.error.unsupported')).toBeTruthy()
+      expect(screen.getByText('intent.error.unsupported')).toBeTruthy()
       expect(screen.queryByTestId('livekit-room')).toBeNull()
     })
 
@@ -642,6 +587,15 @@ describe('/intents?intent=<id>', () => {
       expect(text).not.toContain(TOKEN)
       expect(text).not.toContain('intent-42')
     })
+  })
+
+  it('posts no message of its own from join to left: cozy-interapp alone talks to the host', async () => {
+    const post = vi.spyOn(window, 'postMessage').mockImplementation(() => {})
+    await renderIntent()
+    act(() => lk().onConnected())
+    hostLeaves()
+    act(() => lk().onDisconnected(DisconnectReason.CLIENT_INITIATED))
+    expect(post).not.toHaveBeenCalled()
   })
 
   it('does not speak to the host once unmounted', async () => {

@@ -10,14 +10,14 @@ import {
 } from 'vitest'
 import { ApiError } from '@/api/ApiError'
 import { fetchApi } from '@/api/fetchApi'
-import { authUrl } from '@/features/auth/utils/authUrl'
 import { startIntentService } from './intentService'
 
 /*
  * Page /intents?intent=<id>: Meet is the *service* of a cozy intent, served by
- * cozy-stack in an iframe. cozy-interapp replaces the postMessage protocol of
- * /embed. The stack token and the LiveKit token are never logged, stored or
- * put in a URL.
+ * cozy-stack in an iframe. cozy-interapp alone talks to the host: no message
+ * of our own. The Meet session already exists when the host mounts the
+ * iframe: the page never signs in. The stack token and the LiveKit token are
+ * never logged, stored or put in a URL.
  */
 
 const interapp = vi.hoisted(() => ({
@@ -54,7 +54,6 @@ const LIVEKIT = 'eyJ.secret-livekit-token.sig'
 const STACK = 'stack-access-token-secret'
 const PLATFORM = 'https://alice.twake.example.org'
 const JOIN_TIMEOUT_MS = 10_000
-const SIGNED_IN = { source: 'twake-meet-intent', type: 'signed-in' }
 
 const data = (fields: object = {}) => ({
   room: ROOM,
@@ -64,21 +63,16 @@ const data = (fields: object = {}) => ({
   ...fields,
 })
 
-// onNeedsSignIn(signIn): a 401, the page shows a button that calls signIn on
-// click (a popup needs a user gesture)
 // onError: failures before a service exists (no stack token yet, so no
 // cozy-interapp to answer through) can only be told to the page itself
 const handlers = () => ({
   onJoin: vi.fn(),
   onLeave: vi.fn(),
   onError: vi.fn(),
-  onNeedsSignIn: vi.fn(),
 })
 const flush = () => vi.advanceTimersByTimeAsync(0)
 const stackToken = fetchApi as unknown as Mock
 const sent = () => interapp.service.sendResult.mock.calls.map(([r]) => r)
-
-const popup = { closed: false, close: vi.fn() }
 
 const start = async (h = handlers()) => {
   const bridge = startIntentService(h)
@@ -108,9 +102,9 @@ describe('startIntentService', () => {
     interapp.createService.mockResolvedValue(interapp.service)
     stackToken.mockReset()
     answerStackToken()
-    popup.closed = false
-    popup.close = vi.fn()
-    vi.spyOn(window, 'open').mockReturnValue(popup as never)
+    // cozy-interapp is mocked: whatever reaches postMessage is our own
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    vi.spyOn(window, 'postMessage').mockImplementation(() => {})
     window.history.pushState({}, '', `/intents?intent=${INTENT}`)
   })
 
@@ -423,6 +417,14 @@ describe('startIntentService', () => {
       bridge!.joined()
       expect(sent()).toEqual([])
     })
+
+    it('talks only through cozy-interapp: no message of its own, from join to left', async () => {
+      const { bridge } = await start()
+      bridge!.joined()
+      hostSends({ leave: true })
+      bridge!.left('user')
+      expect(window.postMessage).not.toHaveBeenCalled()
+    })
   })
 
   describe('leave from the host', () => {
@@ -460,216 +462,37 @@ describe('startIntentService', () => {
     })
   })
 
-  // A popup opened by async code after a 401 is blocked (no user gesture):
-  // the bridge never calls window.open by itself. It hands the page a
-  // signIn() through onNeedsSignIn(signIn); the page calls it from a click.
+  // The Meet session must exist when the host mounts the iframe: the page
+  // never signs in (no popup, no message of its own). A 401, or the 409 of a
+  // session from before the workplaceFqdn scope (no twake_instance), is told
+  // to the page as `unauthenticated`, once, and nothing is tried again.
   describe('a session that is missing', () => {
-    // Sent by the popup the page opened, unless said otherwise (jsdom takes
-    // only a real Window as `source` in the init: set it afterwards)
-    const signedInMessage = (
-      origin = window.location.origin,
-      source: unknown = popup
-    ) => {
-      const event = new MessageEvent('message', { data: SIGNED_IN, origin })
-      Object.defineProperty(event, 'source', { value: source })
-      window.dispatchEvent(event)
-    }
-
-    beforeEach(() => {
-      stackToken.mockRejectedValueOnce(new ApiError(401, {}))
-    })
-
-    // starts, then the user clicks (calls the signIn the page was handed)
-    const startAndClick = async () => {
-      const h = handlers()
-      const out = await start(h)
-      expect(h.onNeedsSignIn).toHaveBeenCalledTimes(1)
-      const signIn = h.onNeedsSignIn.mock.calls[0][0] as () => void
-      return { ...out, signIn }
-    }
-
-    it('asks the page for a sign-in, and opens no popup by itself', async () => {
-      const { h } = await start()
-      expect(h.onNeedsSignIn).toHaveBeenCalledTimes(1)
-      expect(typeof h.onNeedsSignIn.mock.calls[0][0]).toBe('function')
-      await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS * 2)
-      expect(window.open).not.toHaveBeenCalled()
-      expect(h.onError).not.toHaveBeenCalled()
-      expect(h.onJoin).not.toHaveBeenCalled()
-      expect(interapp.createService).not.toHaveBeenCalled()
-    })
-
-    it('opens the sign-in page of Meet in a popup, coming back to /intents/signed-in, when signIn is called', async () => {
-      const { signIn } = await startAndClick()
-      signIn()
-      expect(window.open).toHaveBeenCalledTimes(1)
-      const url = vi.mocked(window.open).mock.calls[0][0]
-      expect(String(url)).toBe(
-        authUrl({ returnTo: `${window.location.origin}/intents/signed-in` })
-      )
-      expect(interapp.createService).not.toHaveBeenCalled()
-    })
-
-    it('does not ask for the stack token again before signIn is called', async () => {
-      await startAndClick()
-      await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS)
-      expect(stackToken).toHaveBeenCalledTimes(1)
-    })
-
-    it('asks again, once, when the popup closes', async () => {
-      const { h, signIn } = await startAndClick()
-      signIn()
-      popup.closed = true
-      await vi.advanceTimersByTimeAsync(2_000)
-      expect(stackToken).toHaveBeenCalledTimes(2)
-      expect(h.onJoin).toHaveBeenCalledTimes(1)
-      await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS)
-      expect(stackToken).toHaveBeenCalledTimes(2)
-      expect(window.open).toHaveBeenCalledTimes(1)
-    })
-
-    it('asks again, once, on the signed-in message of its own origin', async () => {
-      const { h, signIn } = await startAndClick()
-      signIn()
-      signedInMessage()
-      signedInMessage()
-      await flush()
-      expect(stackToken).toHaveBeenCalledTimes(2)
-      expect(h.onJoin).toHaveBeenCalledTimes(1)
-    })
-
-    it('ignores a signed-in message of another origin', async () => {
-      const { signIn } = await startAndClick()
-      signIn()
-      signedInMessage('https://evil.example.net')
-      await flush()
-      expect(stackToken).toHaveBeenCalledTimes(1)
-    })
-
-    it('ignores a signed-in message of its own origin from another window than the popup', async () => {
-      const { signIn } = await startAndClick()
-      signIn()
-      signedInMessage(window.location.origin, window)
-      signedInMessage(window.location.origin, null)
-      await flush()
-      expect(stackToken).toHaveBeenCalledTimes(1)
-    })
-
-    it('ignores any other message of its own origin', async () => {
-      const { signIn } = await startAndClick()
-      signIn()
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: { ...SIGNED_IN, type: 'other' },
-          origin: window.location.origin,
-        })
-      )
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: { source: 'someone', type: 'signed-in' },
-          origin: window.location.origin,
-        })
-      )
-      await flush()
-      expect(stackToken).toHaveBeenCalledTimes(1)
-    })
-
-    it('says unauthenticated, after one retry only, when it is still 401', async () => {
-      stackToken.mockReset()
-      stackToken.mockRejectedValue(new ApiError(401, {}))
-      const { h, signIn } = await startAndClick()
-      signIn()
-      signedInMessage()
-      await flush()
-      expect(stackToken).toHaveBeenCalledTimes(2)
-      expect(window.open).toHaveBeenCalledTimes(1)
-      // the second 401 does not ask for a second sign-in
-      expect(h.onNeedsSignIn).toHaveBeenCalledTimes(1)
-      expect(h.onError).toHaveBeenCalledTimes(1)
-      expect(h.onError).toHaveBeenCalledWith('unauthenticated')
-      expect(h.onJoin).not.toHaveBeenCalled()
-    })
-
-    it('says popup_blocked when the click opens no popup', async () => {
-      vi.mocked(window.open).mockReturnValue(null)
-      const { h, signIn } = await startAndClick()
-      signIn()
-      await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS)
-      expect(h.onError).toHaveBeenCalledTimes(1)
-      expect(h.onError).toHaveBeenCalledWith('popup_blocked')
-      expect(stackToken).toHaveBeenCalledTimes(1)
-      expect(h.onJoin).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('a stack that rejected the id token', () => {
-    it('asks the page for a sign-in on a 401 id_token_rejected, as on a bare 401', async () => {
-      stackToken.mockReset()
-      stackToken.mockRejectedValue(
-        new ApiError(401, { error: 'id_token_rejected' })
-      )
-      const { h } = await start()
-      expect(h.onNeedsSignIn).toHaveBeenCalledTimes(1)
-      expect(typeof h.onNeedsSignIn.mock.calls[0][0]).toBe('function')
-      expect(h.onError).not.toHaveBeenCalled()
-      expect(window.open).not.toHaveBeenCalled()
-      expect(interapp.createService).not.toHaveBeenCalled()
-    })
-
-    it('says unreachable on a 502 stack_exchange_failed, with no sign-in', async () => {
-      stackToken.mockReset()
-      stackToken.mockRejectedValue(
-        new ApiError(502, { error: 'stack_exchange_failed' })
-      )
-      const { h } = await start()
-      expect(h.onError).toHaveBeenCalledWith('unreachable')
-      expect(h.onNeedsSignIn).not.toHaveBeenCalled()
-      expect(window.open).not.toHaveBeenCalled()
-    })
-  })
-
-  // A session older than the workplaceFqdn scope has no twake_instance: the
-  // server answers 409 no_twake_instance, and signing in again fills it
-  describe('a session without a twake instance', () => {
-    const noInstance = () => new ApiError(409, { error: 'no_twake_instance' })
-
-    it('asks the page for a sign-in on a 409 no_twake_instance, as on a 401', async () => {
-      stackToken.mockReset()
-      stackToken.mockRejectedValue(noInstance())
-      const { h } = await start()
-      expect(h.onNeedsSignIn).toHaveBeenCalledTimes(1)
-      expect(typeof h.onNeedsSignIn.mock.calls[0][0]).toBe('function')
-      expect(h.onError).not.toHaveBeenCalled()
-      expect(window.open).not.toHaveBeenCalled()
-      expect(interapp.createService).not.toHaveBeenCalled()
-    })
-
-    it('asks again, once, after the sign-in, and joins when the instance is known', async () => {
-      stackToken.mockReset()
-      stackToken.mockRejectedValueOnce(noInstance())
-      answerStackToken()
-      const { h } = await start()
-      h.onNeedsSignIn.mock.calls[0][0]()
-      expect(window.open).toHaveBeenCalledTimes(1)
-      popup.closed = true
-      await vi.advanceTimersByTimeAsync(2_000)
-      expect(stackToken).toHaveBeenCalledTimes(2)
-      expect(h.onJoin).toHaveBeenCalledTimes(1)
-    })
-
-    it('says unreachable, not unauthenticated, and does not loop, when it is still 409', async () => {
-      stackToken.mockReset()
-      stackToken.mockRejectedValue(noInstance())
-      const { h } = await start()
-      h.onNeedsSignIn.mock.calls[0][0]()
-      popup.closed = true
-      await vi.advanceTimersByTimeAsync(2_000)
-      expect(stackToken).toHaveBeenCalledTimes(2)
-      expect(h.onNeedsSignIn).toHaveBeenCalledTimes(1)
-      expect(window.open).toHaveBeenCalledTimes(1)
-      expect(h.onError).toHaveBeenCalledTimes(1)
-      expect(h.onError).toHaveBeenCalledWith('unreachable')
-    })
+    it.each([
+      ['a bare 401', new ApiError(401, {})],
+      [
+        'a 401 id_token_rejected',
+        new ApiError(401, { error: 'id_token_rejected' }),
+      ],
+      [
+        'a 409 no_twake_instance',
+        new ApiError(409, { error: 'no_twake_instance' }),
+      ],
+    ])(
+      'says unauthenticated once on %s, opens no window and posts no message',
+      async (_n, refusal) => {
+        stackToken.mockReset()
+        stackToken.mockRejectedValue(refusal)
+        const { h } = await start()
+        await vi.advanceTimersByTimeAsync(JOIN_TIMEOUT_MS * 2)
+        expect(h.onError).toHaveBeenCalledTimes(1)
+        expect(h.onError).toHaveBeenCalledWith('unauthenticated')
+        expect(window.open).not.toHaveBeenCalled()
+        expect(window.postMessage).not.toHaveBeenCalled()
+        expect(stackToken).toHaveBeenCalledTimes(1)
+        expect(h.onJoin).not.toHaveBeenCalled()
+        expect(interapp.createService).not.toHaveBeenCalled()
+      }
+    )
 
     it.each([
       ['another error code', { error: 'other' }],
@@ -680,14 +503,23 @@ describe('startIntentService', () => {
       stackToken.mockRejectedValue(new ApiError(409, body))
       const { h } = await start()
       expect(h.onError).toHaveBeenCalledWith('unreachable')
-      expect(h.onNeedsSignIn).not.toHaveBeenCalled()
+      expect(window.open).not.toHaveBeenCalled()
+    })
+
+    it('says unreachable on a 502 stack_exchange_failed', async () => {
+      stackToken.mockReset()
+      stackToken.mockRejectedValue(
+        new ApiError(502, { error: 'stack_exchange_failed' })
+      )
+      const { h } = await start()
+      expect(h.onError).toHaveBeenCalledWith('unreachable')
       expect(window.open).not.toHaveBeenCalled()
     })
   })
 
   describe('a stack token that cannot be had', () => {
     it.each([
-      [409, 'no twake instance'],
+      [409, 'conflict without a code'],
       [400, 'bad request'],
       [502, 'bad gateway'],
     ])('says unreachable on a %s (%s), without a popup', async (status) => {

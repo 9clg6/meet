@@ -5,7 +5,7 @@ import {
 } from 'livekit-client'
 
 /*
- * What Meet tells the host of a call it framed (the service of a cozy
+ * What Meet tells the host that framed it (Meet is the service of a cozy
  * intent, /intents): joined, left, error.
  */
 export type LeftReason = 'user' | 'idle' | 'removed' | 'disconnected'
@@ -14,7 +14,6 @@ export type ErrorCode =
   | 'token_rejected'
   | 'unreachable'
   | 'unauthenticated'
-  | 'popup_blocked'
   | 'unknown'
 
 export type HostJoin = { token: string; audio: boolean; video: boolean }
@@ -26,7 +25,7 @@ export type HostBridge = {
   close: () => void
 }
 
-/** What the parent is told when LiveKit disconnects the user. */
+/** What the host is told when LiveKit disconnects the user. */
 export const toLeftReason = (reason?: DisconnectReason): LeftReason => {
   switch (reason) {
     case DisconnectReason.CLIENT_INITIATED:
@@ -40,7 +39,7 @@ export const toLeftReason = (reason?: DisconnectReason): LeftReason => {
   }
 }
 
-/** What the parent is told when the join fails. */
+/** What the host is told when the join fails. */
 export const toErrorCode = (error: Error): ErrorCode => {
   if (!(error instanceof ConnectionError)) return 'unknown'
   switch (error.reason) {

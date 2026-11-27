@@ -3,13 +3,13 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { connectionObserverStore } from '@/stores/connectionObserver'
 import { navigateTo } from '@/navigation/navigateTo'
-import { EmbedIdleContext } from '@/features/embed/EmbedIdleContext'
+import { IntentIdleContext } from '@/features/intent/IntentIdleContext'
 import { IsIdleDisconnectModal } from './IsIdleDisconnectModal'
 
 /*
  * The idle dialog: "Leave" and the end of the countdown leave the call. On
- * /feedback outside the embed; framed by Chat, they tell the page (which says
- * left{idle} to Chat) and never navigate.
+ * /feedback outside the intent page; framed by Chat, they tell the page
+ * (which says left{idle} to Chat) and never navigate.
  */
 
 vi.mock('@/navigation/navigateTo', () => ({ navigateTo: vi.fn() }))
@@ -24,9 +24,9 @@ const COUNTDOWN_MS = 120_000
 
 const renderModal = (onIdle?: () => void) =>
   render(
-    <EmbedIdleContext.Provider value={onIdle ?? null}>
+    <IntentIdleContext.Provider value={onIdle ?? null}>
       <IsIdleDisconnectModal />
-    </EmbedIdleContext.Provider>
+    </IntentIdleContext.Provider>
   )
 
 const leaveButton = () => screen.getByRole('button', { name: /leaveButton/ })
@@ -42,7 +42,7 @@ describe('idle disconnect dialog', () => {
     connectionObserverStore.isIdleDisconnectModalOpen = false
   })
 
-  describe('framed by Chat (/embed)', () => {
+  describe('framed by Chat (/intents)', () => {
     it('Leave tells the page it is idle, closes the dialog, no /feedback', () => {
       const onIdle = vi.fn()
       renderModal(onIdle)

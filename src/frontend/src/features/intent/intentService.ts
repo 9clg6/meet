@@ -2,24 +2,19 @@ import * as interapp from 'cozy-interapp'
 import type { IntentServiceAPI } from 'cozy-interapp'
 import { ApiError } from '@/api/ApiError'
 import { fetchApi } from '@/api/fetchApi'
-import { authUrl } from '@/features/auth/utils/authUrl'
-import type { HostBridge, HostJoin } from './embedEvents'
+import type { HostBridge, HostJoin } from './intentEvents'
 
 /*
  * Meet as the *service* of a cozy intent: /intents?intent=<id> is framed by
  * the page that opens the intent (cozy-interapp puts the iframe there), and
  * cozy-interapp carries the exchange with the host (data in, results out). The
- * stack token and the LiveKit token are never logged, stored or put in a URL.
+ * Meet session already exists when the host mounts the iframe: the page
+ * never signs in. The stack token and the LiveKit token are never logged,
+ * stored or put in a URL.
  */
-
-const SIGNED_IN = { source: 'twake-meet-intent', type: 'signed-in' }
-const SIGNED_IN_PATH = '/intents/signed-in'
 
 // Without the service by then, the host does not speak this protocol
 const JOIN_TIMEOUT_MS = 10_000
-
-// How often the sign-in popup is looked at, to know it was closed
-const POPUP_POLL_MS = 500
 
 // The id of the intent, as the host sends it in the URL
 const INTENT_ID = /^[A-Za-z0-9_-]{1,128}$/
@@ -27,11 +22,7 @@ const INTENT_ID = /^[A-Za-z0-9_-]{1,128}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /** What the page itself shows when no service exists to tell the host. */
-export type IntentFailure =
-  | 'unauthenticated'
-  | 'popup_blocked'
-  | 'unreachable'
-  | 'unsupported'
+export type IntentFailure = 'unauthenticated' | 'unreachable' | 'unsupported'
 
 /** What the host gave: the room, its LiveKit token and the media choices. */
 export type IntentJoin = HostJoin & { room: string; displayName?: string }
@@ -40,15 +31,13 @@ export type IntentHandlers = {
   onJoin: (join: IntentJoin) => void
   onLeave: () => void
   onError: (code: IntentFailure) => void
-  /** A 401: call `signIn` from a click (a popup needs a user gesture). */
-  onNeedsSignIn: (signIn: () => void) => void
 }
 
 type StackToken = { access_token: string; platform_url: string }
 
-// A 401, or the 409 of a session from before the `workplaceFqdn` scope (it has
-// no twake_instance; signing in again fills it)
-const needsSignIn = (error: unknown) =>
+// No usable session: a 401, or the 409 of a session from before the
+// `workplaceFqdn` scope (it has no twake_instance)
+const isUnauthenticated = (error: unknown) =>
   error instanceof ApiError &&
   (error.statusCode === 401 ||
     (error.statusCode === 409 &&
@@ -124,10 +113,9 @@ let active: HostBridge | null = null
  * `error` back to the host as results. Returns null (and does nothing) when
  * the URL has no `intent`.
  *
- * Without a session (401) it gives the page a `signIn` to call from a click,
- * which opens the sign-in popup and asks again once, when the popup says it
- * is done or closes. Errors before a service exists go to `onError`: only
- * the page can tell them.
+ * Without a usable session (a 401, or a 409 `no_twake_instance`) it says
+ * `unauthenticated` and tries nothing else: it never signs in. Errors before
+ * a service exists go to `onError`: only the page can tell them.
  *
  * Used by: IntentService.
  */
@@ -145,7 +133,6 @@ export const startIntentService = (
   let isLeaving = false
   let timer: ReturnType<typeof setTimeout> | undefined
   let stopListening: (() => void) | undefined
-  let stopSignIn: (() => void) | undefined
 
   const fail = (code: IntentFailure) => {
     clearTimeout(timer)
@@ -169,7 +156,6 @@ export const startIntentService = (
       isClosed = true
       clearTimeout(timer)
       stopListening?.()
-      stopSignIn?.()
     },
   }
 
@@ -219,56 +205,20 @@ export const startIntentService = (
     api.notifyReadyToUse()
   }
 
-  const start = async (isRetry: boolean) => {
+  const start = async () => {
     let token: StackToken | undefined
     try {
       token = await fetchApi<StackToken>('stack-token/', { method: 'POST' })
     } catch (error) {
       if (isClosed) return
-      if (!needsSignIn(error)) return fail('unreachable')
-      if (!isRetry) return handlers.onNeedsSignIn(signIn)
-      // after signing in again: a 401 is `unauthenticated`, a 409 `unreachable`
-      return fail(
-        error instanceof ApiError && error.statusCode === 401
-          ? 'unauthenticated'
-          : 'unreachable'
-      )
+      return fail(isUnauthenticated(error) ? 'unauthenticated' : 'unreachable')
     }
     if (isClosed) return
     if (!isStackToken(token)) return fail('unreachable')
     await serve(token)
   }
 
-  // Asks again, once, when the popup says it is done (a message of our own
-  // origin from /intents/signed-in) or is closed
-  const signIn = () => {
-    if (stopSignIn) return
-    const popup = window.open(
-      authUrl({ returnTo: `${window.location.origin}${SIGNED_IN_PATH}` })
-    )
-    if (!popup) return fail('popup_blocked')
-    const done = () => {
-      stopSignIn?.()
-      void start(true)
-    }
-    const onMessage = (event: MessageEvent) => {
-      const data = event.data as Record<string, unknown> | null
-      const isSignedIn =
-        event.source === popup &&
-        event.origin === window.location.origin &&
-        data?.source === SIGNED_IN.source &&
-        data.type === SIGNED_IN.type
-      if (isSignedIn) done()
-    }
-    const poll = setInterval(() => popup.closed && done(), POPUP_POLL_MS)
-    window.addEventListener('message', onMessage)
-    stopSignIn = () => {
-      clearInterval(poll)
-      window.removeEventListener('message', onMessage)
-    }
-  }
-
-  void start(false)
+  void start()
   active = bridge
   return bridge
 }

@@ -1,58 +1,60 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { Route, Router } from 'wouter'
 import { memoryLocation } from 'wouter/memory-location'
 import { Conference } from '@/features/rooms/components/Conference'
 import { Permissions } from '@/features/rooms/components/Permissions'
-import { Button } from '@/primitives'
-import { EmbedIdleContext } from '../EmbedIdleContext'
+import { IntentIdleContext } from '../IntentIdleContext'
+import { IntentBridgeContext } from '../IntentBridgeContext'
 import {
   type IntentFailure,
   type IntentJoin,
   startIntentService,
 } from '../intentService'
-import type { HostBridge } from '../embedEvents'
-import { useCallEvents, useFinish } from '../useEmbedCall'
+import type { HostBridge } from '../intentEvents'
+import { useCallEvents, useFinish } from '../useIntentCall'
 
 /**
  * Connects to the host (the intent of the URL) for the life of the component
  * (an Effect: the service is a listener on `window`, outside React). Returns
- * what the page shows or does: the join request, the leave flag, a failure to
- * display, a sign-in to offer, and a ref to the bridge to talk back.
+ * what the page shows or does: the call (the join request and the bridge to
+ * talk back), the leave flag and a failure to display.
  * Used by: IntentService.
  */
 const useIntentHost = () => {
-  const [join, setJoin] = useState<IntentJoin | null>(null)
+  const [call, setCall] = useState<{
+    join: IntentJoin
+    bridge: HostBridge
+  } | null>(null)
   const [isLeaving, setIsLeaving] = useState(false)
   // Set in the handler itself: a LiveKit callback running before the next
   // render must already see the leave
   const isLeavingRef = useRef(false)
   const [failure, setFailure] = useState<IntentFailure | null>(null)
-  const [signIn, setSignIn] = useState<(() => void) | null>(null)
-  const bridge = useRef<HostBridge | null>(null)
 
   useEffect(() => {
     const host = startIntentService({
-      onJoin: (request) => {
-        setSignIn(null)
-        setJoin(request)
+      // onJoin comes after the awaits of the service: `host` is set by then
+      onJoin: (join) => {
+        if (host) setCall({ join, bridge: host })
       },
       onLeave: () => {
         isLeavingRef.current = true
         setIsLeaving(true)
       },
-      onError: (code) => {
-        setSignIn(null)
-        setFailure(code)
-      },
-      // a function in state: wrapped so React does not call it
-      onNeedsSignIn: (start) => setSignIn(() => start),
+      onError: setFailure,
     })
-    bridge.current = host
     return () => host?.close()
   }, [])
 
-  return { join, isLeaving, isLeavingRef, failure, signIn, bridge }
+  return { call, isLeaving, isLeavingRef, failure }
 }
 
 /**
@@ -73,35 +75,59 @@ const InRoom = ({ room, children }: { room: string; children: ReactNode }) => {
 }
 
 /**
- * Waits for the data of the host, then enters the call with the LiveKit token
- * of the host (the Meet session, if any, only serves to exchange the platform
- * token). It only shows a sign-in button (no session) or an error that no
- * service could tell the host; nothing once the call is over.
+ * The call the host asked for, with its LiveKit token (the Meet session, if
+ * any, only serves to exchange the platform token). Rendered inside
+ * IntentBridgeContext, which its hooks read to tell the host; nothing once
+ * the call is over. Used by: IntentCall.
+ */
+const InCall = ({
+  join,
+  isLeaving,
+  isLeavingRef,
+}: {
+  join: IntentJoin
+  isLeaving: boolean
+  isLeavingRef: RefObject<boolean>
+}) => {
+  const { isOver, finish, onIdle } = useFinish()
+  const events = useCallEvents(isLeaving, isLeavingRef, finish)
+  if (isOver) return null
+
+  const { room, ...options } = join
+  return (
+    <InRoom room={room}>
+      <IntentIdleContext.Provider value={onIdle}>
+        <Conference
+          roomId={room}
+          onLobbyRequired={() => {}}
+          intent={{ ...options, isLeaving, ...events }}
+        />
+      </IntentIdleContext.Provider>
+    </InRoom>
+  )
+}
+
+/**
+ * Waits for the data of the host, then enters the call. It only shows an
+ * error that no service could tell the host; never a sign-in: the session
+ * exists before the host frames /intents.
  * Used by: IntentService.
  */
 const IntentCall = () => {
   const { t } = useTranslation()
-  const { join, isLeaving, isLeavingRef, failure, signIn, bridge } =
-    useIntentHost()
-  const { isOver, finish, onIdle } = useFinish(bridge)
-  const events = useCallEvents(bridge, isLeaving, isLeavingRef, finish)
+  const { call, isLeaving, isLeavingRef, failure } = useIntentHost()
 
-  if (failure) return <p role="alert">{t(`embed.intent.error.${failure}`)}</p>
-  if (signIn)
-    return <Button onPress={signIn}>{t('embed.intent.signIn')}</Button>
-  if (!join || isOver) return null
+  if (failure) return <p role="alert">{t(`intent.error.${failure}`)}</p>
+  if (!call) return null
 
-  const { room, ...call } = join
   return (
-    <InRoom room={room}>
-      <EmbedIdleContext.Provider value={onIdle}>
-        <Conference
-          roomId={room}
-          onLobbyRequired={() => {}}
-          embed={{ ...call, isLeaving, ...events }}
-        />
-      </EmbedIdleContext.Provider>
-    </InRoom>
+    <IntentBridgeContext.Provider value={call.bridge}>
+      <InCall
+        join={call.join}
+        isLeaving={isLeaving}
+        isLeavingRef={isLeavingRef}
+      />
+    </IntentBridgeContext.Provider>
   )
 }
 

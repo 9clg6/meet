@@ -10,7 +10,7 @@ import { useScreenReaderAnnounce } from '@/hooks/useScreenReaderAnnounce'
 import { SettingsDialogExtendedKey } from '@/features/settings/type'
 import { useHumanizeDuration } from '@/hooks/useHumanizeDuration'
 import { openSettingsDialog } from '@/stores/settings'
-import { useEmbedIdleLeave } from '@/features/embed/EmbedIdleContext'
+import { useIntentIdleLeave } from '@/features/intent/IntentIdleContext'
 
 const IDLE_DISCONNECT_TIMEOUT_MS = 120000 // 2 minutes
 const COUNTDOWN_ANNOUNCEMENT_SECONDS = new Set([90, 60, 30])
@@ -18,12 +18,12 @@ const FINAL_COUNTDOWN_SECONDS = 10
 
 // Leaves the call: the feedback page, or, framed by Chat, a message to it
 const useLeave = () => {
-  const embedLeave = useEmbedIdleLeave()
+  const intentLeave = useIntentIdleLeave()
   return useCallback(() => {
     connectionObserverStore.isIdleDisconnectModalOpen = false
-    if (embedLeave) embedLeave()
+    if (intentLeave) intentLeave()
     else navigateTo('feedback', { duplicateIdentity: false })
-  }, [embedLeave])
+  }, [intentLeave])
 }
 
 const useSrCountdownAnnouncement = (seconds: number) => {

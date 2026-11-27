@@ -2,16 +2,17 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { type DisconnectReason } from 'livekit-client'
 import {
   type ErrorCode,
-  type HostBridge,
   type LeftReason,
   toErrorCode,
   toLeftReason,
-} from './embedEvents'
+} from './intentEvents'
+import { useIntentBridge } from './IntentBridgeContext'
 
 /*
  * What /intents needs once the host has asked for a call: the finish-once
  * flag, the grace of a bare disconnection and the LiveKit events that make
- * the host speak. They only need a bridge (joined / left / error).
+ * the host speak. They read the bridge to the host (joined / left / error)
+ * from IntentBridgeContext.
  */
 
 // A bare disconnection before `joined` waits this long for the precise
@@ -19,11 +20,12 @@ import {
 const DISCONNECT_GRACE_MS = 1_000
 
 /**
- * Tells the parent once that the call is over, then flags it so the call
- * unmounts. `onIdle` is stable: the idle countdown restarts when it changes.
- * Used by: IntentService.
+ * Tells the host once that the call is over, then flags it so the call
+ * unmounts. `onIdle` is stable while the bridge of the context is the same:
+ * the idle countdown restarts when it changes. Used by: IntentService.
  */
-export const useFinish = (bridge: RefObject<HostBridge | null>) => {
+export const useFinish = () => {
+  const bridge = useIntentBridge()
   const [isOver, setIsOver] = useState(false)
   const isOverRef = useRef(false)
 
@@ -31,7 +33,7 @@ export const useFinish = (bridge: RefObject<HostBridge | null>) => {
     (reason: LeftReason) => {
       if (isOverRef.current) return
       isOverRef.current = true
-      bridge.current?.left(reason)
+      bridge?.left(reason)
       setIsOver(true)
     },
     [bridge]
@@ -64,13 +66,12 @@ export const useGrace = (isLeaving: boolean) => {
 }
 
 /**
- * The LiveKit events that make the parent speak: `joined` once connected,
+ * The LiveKit events that make the host speak: `joined` once connected,
  * `left` after it, `error` for a join that failed (a bare disconnection waits
  * the grace for the precise error). Nothing is said about a connection the
  * host abandoned with `leave`. Used by: IntentService.
  */
 export const useCallEvents = (
-  bridge: RefObject<HostBridge | null>,
   isLeaving: boolean,
   isLeavingRef: RefObject<boolean>,
   finish: (reason: LeftReason) => void
@@ -80,13 +81,14 @@ export const useCallEvents = (
   const isJoined = useRef(false)
   // One `error` per failed join: set by the first one posted
   const isErrorPosted = useRef(false)
+  const bridge = useIntentBridge()
   const { startGrace, cancelGrace } = useGrace(isLeaving)
 
   const postError = (code: ErrorCode) => {
     cancelGrace()
     if (isErrorPosted.current) return
     isErrorPosted.current = true
-    bridge.current?.error(code)
+    bridge?.error(code)
   }
 
   return {
@@ -95,7 +97,7 @@ export const useCallEvents = (
       if (isLeavingRef.current) return
       isJoined.current = true
       cancelGrace()
-      bridge.current?.joined()
+      bridge?.joined()
     },
     onDisconnected: (reason?: DisconnectReason) => {
       if (isJoined.current) return finish(toLeftReason(reason))

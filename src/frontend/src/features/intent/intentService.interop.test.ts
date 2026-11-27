@@ -63,7 +63,6 @@ describe('startIntentService with cozy-interapp as it is shipped', () => {
       onJoin,
       onLeave: vi.fn(),
       onError,
-      onNeedsSignIn: vi.fn(),
     })
     await vi.waitFor(() =>
       expect(createService).toHaveBeenCalledWith('intent-42', window)
